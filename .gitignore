@@ -1,0 +1,21 @@
+# Python Environment
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+.env
+
+# Data and Logs
+data/*.json
+data/*.csv
+!data/sample_reviews.csv
+*.log
+
+# IDEs
+.vscode/
+.idea/
+
+# Pytest
+.pytest_cache/
