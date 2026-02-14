@@ -20,9 +20,12 @@ class ScraperEngine:
     Scraper engine for App Store (urllib-based) and Play Store (library-based).
     """
     
-    def __init__(self, weeks_back: int = 12):
-        self.weeks_back = weeks_back
-        self.cutoff_date = datetime.now() - timedelta(weeks=weeks_back)
+    def __init__(self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, weeks_back: int = 12):
+        self.end_date = end_date or datetime.now()
+        if start_date:
+            self.start_date = start_date
+        else:
+            self.start_date = self.end_date - timedelta(weeks=weeks_back)
 
     def scrape_app_store(self, app_id: str, country: str = 'in') -> List[Dict[str, Any]]:
         logger.info(f"Scraping App Store via RSS for ID: {app_id}")
@@ -54,7 +57,7 @@ class ScraperEngine:
                     # fromisoformat handles +HH:MM and +HHMM
                     review_date = datetime.fromisoformat(dt_str)
                     
-                    if review_date.replace(tzinfo=None) < self.cutoff_date:
+                    if not (self.start_date <= review_date.replace(tzinfo=None) <= self.end_date):
                         continue
                         
                     review_obj = ReviewSchema(
@@ -94,7 +97,7 @@ class ScraperEngine:
             processed = []
             for r in result:
                 review_date = r['at']
-                if review_date < self.cutoff_date:
+                if not (self.start_date <= review_date <= self.end_date):
                     continue
                     
                 review_obj = ReviewSchema(

@@ -65,20 +65,27 @@ class PulseOrchestrator:
             with open(self.MANIFEST_FILE, 'w') as f:
                 json.dump(manifest, f, indent=2)
 
-    def run_pipeline(self, force: bool = False) -> Dict[str, Any]:
+    def run_pipeline(self, force: bool = False, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> Dict[str, Any]:
         """
         Executes the full pipeline.
         :param force: If True, bypasses idempotency check.
+        :param start_date: Optional start date for scraping.
+        :param end_date: Optional end date for scraping.
         """
-        if not force and self._already_run_this_week():
-            msg = f"Pipeline already run for {self._get_week_id()}. Use force=True to override."
+        # If dates are provided, we skip the standard week-based idempotency check
+        # and treat it as a custom run.
+        is_custom_run = start_date is not None or end_date is not None
+        run_id = self._get_week_id() if not is_custom_run else f"custom_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        if not force and not is_custom_run and self._already_run_this_week():
+            msg = f"Pipeline already run for {run_id}. Use force=True to override."
             logger.info(msg)
             return {"status": "skipped", "reason": msg}
 
         try:
             # 1. Scrape & Clean
             logger.info("Stage 1/4: Scraping and Cleansing...")
-            scraper = ScraperEngine(weeks_back=self.weeks_back)
+            scraper = ScraperEngine(start_date=start_date, end_date=end_date, weeks_back=self.weeks_back)
             ios_reviews = scraper.scrape_app_store(app_id="1404871703")
             android_reviews = scraper.scrape_play_store(package_name="com.groww", count=150)
             all_reviews = ios_reviews + android_reviews
@@ -86,7 +93,7 @@ class PulseOrchestrator:
             if not all_reviews:
                 raise PulsePipelineError("No reviews found during scraping.", "Scraping")
 
-            reviews_path = f"data/raw/reviews_{self._get_week_id()}.json"
+            reviews_path = f"data/raw/reviews_{run_id}.json"
             with open(reviews_path, 'w', encoding='utf-8') as f:
                 json.dump(all_reviews, f, indent=2, default=str)
 
@@ -96,7 +103,7 @@ class PulseOrchestrator:
             themes_objs = engine.cluster_reviews(all_reviews)
             themes = [t.model_dump() if hasattr(t, 'model_dump') else t.dict() for t in themes_objs]
 
-            analysis_path = f"data/processed/analysis_{self._get_week_id()}.json"
+            analysis_path = f"data/processed/analysis_{run_id}.json"
             with open(analysis_path, 'w', encoding='utf-8') as f:
                 json.dump(themes, f, indent=2)
 
@@ -107,21 +114,20 @@ class PulseOrchestrator:
             
             email_html = EmailGenerator.generate_html(themes)
 
-            note_path = f"data/processed/pulse_note_{self._get_week_id()}.md"
-            email_path = f"data/processed/pulse_email_{self._get_week_id()}.html"
+            note_path = f"data/processed/pulse_note_{run_id}.md"
+            email_path = f"data/processed/pulse_email_{run_id}.html"
             
             with open(note_path, 'w', encoding='utf-8') as f:
                 f.write(pulse_note)
             with open(email_path, 'w', encoding='utf-8') as f:
                 f.write(email_html)
 
-            # 4. Finalize
-            logger.info("Stage 4/4: Finalizing...")
-            self._mark_week_completed()
+            if not is_custom_run:
+                self._mark_week_completed()
             
             result = {
                 "status": "success",
-                "week_id": self._get_week_id(),
+                "run_id": run_id,
                 "reviews_count": len(all_reviews),
                 "themes_count": len(themes),
                 "artifacts": {
