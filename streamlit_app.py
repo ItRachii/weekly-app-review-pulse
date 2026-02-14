@@ -10,15 +10,6 @@ st.set_page_config(page_title="Groww Pulse Report", page_icon="📈", layout="wi
 st.title("🌱 Groww - Weekly App Review Pulse")
 st.markdown("Automated sentiment analysis and executive reporting for app store reviews.")
 
-# Custom CSS to hide the chevron icon in popovers
-st.markdown("""
-    <style>
-    [data-testid="stPopover"] svg {
-        display: none !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 # Sidebar for configuration
 with st.sidebar:
     st.header("Pipeline Configuration")
@@ -51,20 +42,64 @@ with st.sidebar:
                 else:
                     st.error(f"Pipeline failed: {result.get('error', 'Unknown error')}")
 
+    # --- Maintenance Section (Senior Engineer Refinement) ---
+    # --- Maintenance Section (Senior Engineer Structural Refinement) ---
     st.divider()
     st.header("🛠️ Maintenance")
-    with st.popover("🗑️ Purge All History", use_container_width=True):
-        st.error("⚠️ This action will permanently delete all reviews, reports, logs, and database records.")
-        st.write("To confirm, please type **delete** below:")
-        confirm_text = st.text_input("Confirmation", placeholder="delete", label_visibility="collapsed")
-        
-        if st.button("🔥 Confirm Full Purge", type="primary", disabled=confirm_text.lower() != "delete", use_container_width=True):
-            with st.spinner("Purging all data..."):
-                orchestrator = PulseOrchestrator()
-                if orchestrator.purge_all_data():
-                    st.session_state.clear()
-                    st.success("All data has been purged successfully!")
+
+    # This 'Senior' approach uses a standard button to avoid the popover chevron
+    # AND allow us to catch the click event in Python to reset the state.
+    if st.button("🗑️ Purge All History", use_container_width=True):
+        # Reset the input value whenever the button is clicked to start fresh
+        st.session_state.purge_val = ""
+        st.session_state.show_maintenance_drawer = not st.session_state.get('show_maintenance_drawer', False)
+
+    if st.session_state.get('show_maintenance_drawer'):
+        with st.container(border=True):
+            st.error("⚠️ Critical Action: Purging all data.")
+            st.write("To confirm, please type **delete** below:")
+            
+            # 1. The Input: Keyed to purge_val
+            st.text_input("Confirm Delete", placeholder="delete", label_visibility="collapsed", key="purge_val")
+            
+            # 2. Buttons: Secure via Python check + visual reactivity via JS
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("🔥 Confirm Full Purge", type="primary", disabled=st.session_state.get("purge_val", "").lower() != "delete", use_container_width=True):
+                    with st.spinner("Purging all data..."):
+                        orchestrator = PulseOrchestrator()
+                        if orchestrator.purge_all_data():
+                            st.session_state.clear()
+                            st.success("All data has been purged successfully!")
+                            st.rerun()
+            with c2:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.session_state.show_maintenance_drawer = False
                     st.rerun()
+            
+            # 3. JS Bridge: Provides the 'Live Reactivity' (Senior UX)
+            components.html(
+                f"""
+                <script>
+                const doc = window.parent.document;
+                const check = () => {{
+                    const inputs = doc.querySelectorAll('input[aria-label="Confirm Delete"]');
+                    const buttons = doc.querySelectorAll('button');
+                    const targetInput = Array.from(inputs).find(i => i.placeholder === "delete");
+                    const targetBtn = Array.from(buttons).find(b => b.innerText.includes("Confirm Full Purge"));
+
+                    if (targetInput && targetBtn) {{
+                        targetInput.addEventListener('input', (e) => {{
+                            targetBtn.disabled = e.target.value.toLowerCase() !== 'delete';
+                        }});
+                    }}
+                }};
+                // Run periodically to catch the container rendering
+                setInterval(check, 300);
+                </script>
+                """,
+                height=0
+            )
 
 # Main content area
 if 'latest_result' in st.session_state:
