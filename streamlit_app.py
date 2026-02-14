@@ -18,8 +18,6 @@ with st.sidebar:
     start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=7))
     end_date = st.date_input("End Date", value=datetime.now())
     
-    force_run = st.checkbox("Force Run (Bypass Idempotency)", value=False)
-    
     if st.button("🚀 Generate Pulse Report", use_container_width=True):
         if start_date > end_date:
             st.error("Error: Start date must be before end date.")
@@ -31,7 +29,6 @@ with st.sidebar:
                 dt_end = datetime.combine(end_date, datetime.max.time())
                 
                 result = orchestrator.run_pipeline(
-                    force=force_run,
                     start_date=dt_start,
                     end_date=dt_end
                 )
