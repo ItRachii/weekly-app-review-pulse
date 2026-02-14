@@ -15,12 +15,18 @@ class Theme(BaseModel):
     review_count: int = Field(..., description="Number of reviews in this theme")
     summary: str = Field(..., description="Brief summary of the theme's core message")
     high_signal_quotes: List[str] = Field(..., description="3 representative, high-signal, non-PII quotes (max 25 words each)")
+    action_ideas: List[str] = Field(..., description="3 specific, realistic, and implementable action ideas for the product team")
 
     @validator('high_signal_quotes')
     def validate_quotes(cls, v):
         if len(v) != 3:
-             # In a real system, we'd handle this better, but for now we enforce exactly 3 in validation
              return (v + ["No relevant quote found"] * 3)[:3]
+        return v
+
+    @validator('action_ideas')
+    def validate_action_ideas(cls, v):
+        if len(v) != 3:
+             return (v + ["No specific action identified"] * 3)[:3]
         return v
 
 class ThemeOutput(BaseModel):
@@ -41,26 +47,29 @@ class ThemeClusteringEngine:
     """
     
     CLUSTERING_PROMPT = """
-    You are an expert product analyst. Your task is to analyze a list of user reviews for the GROWW app and group them into at most 5 semantic themes.
-    For each theme, you must also select 3 high-signal quotes from the input reviews.
+    You are a Senior Product Manager. Your task is to analyze a list of user reviews for the GROWW app and group them into at most 5 semantic themes.
+    For each theme, you must also select 3 high-signal quotes and propose 3 specific action ideas.
 
     ### Rules:
-    1. Semantic Grouping: Group similar feedback (e.g., UI issues, payment failures, app performance).
+    1. Semantic Grouping: Group similar feedback (e.g., UI issues, payment failures).
     2. Labels: Use concise labels (2-4 words, e.g., "Payment Gateway Failures").
     3. Exclusivity: Ensure themes do not overlap.
     4. Coverage: Every major feedback point should fall into one of these 5 categories.
     5. Prioritization: Focus on the most frequent and impactful themes.
 
     ### Quote Selection Criteria:
-    For each theme, select EXACTLY 3 quotes that are:
-    - Clear and Representative of the theme's core message.
-    - Non-PII: Ensure no names, emails, phone numbers, or specific account IDs are included.
-    - Length: Each quote MUST be ≤ 25 words.
-    - Quality: Prefer emotionally strong or highly actionable statements.
+    Select EXACTLY 3 quotes per theme that are clear, representative, non-PII, and ≤ 25 words.
+
+    ### Action Ideas Criteria:
+    Propose EXACTLY 3 action ideas per theme that are:
+    - SPECIFIC: Avoid generic terms like "Improve User Experience". Use "Add a status tracker for withdrawals".
+    - REALISTIC: Focus on incremental, high-impact changes. Avoid massive architectural overhauls (e.g., Do NOT suggest "Rewrite the entire backend").
+    - IMPLEMENTABLE: Clear enough for a Jira ticket. Can be completed in a 2-week sprint.
+    - CONCISE: Max 15 words per idea.
 
     ### Deduplication & Bias Mitigation:
-    - Deduplication: Ensure the 3 quotes represent distinct perspectives or specific nuances within the theme. Avoid near-duplicates.
-    - Bias Mitigation: Avoid 'extreme-only' bias (don't just pick the most angry or most happy quotes). Select quotes that reflect the general sentiment distribution of that specific theme (e.g., if a theme has mostly moderate complaints, pick moderate quotes).
+    - Deduplication: Ensure quotes and action ideas represent distinct perspectives.
+    - Bias Mitigation: Avoid 'extreme-only' bias in quote selection.
     
     ### Input Reviews:
     {reviews_text}
@@ -72,13 +81,14 @@ class ThemeClusteringEngine:
         {{
           "label": "Theme Label",
           "review_count": 12,
-          "summary": "Brief explanation of what users are saying about this theme.",
-          "high_signal_quotes": ["Quote 1", "Quote 2", "Quote 3"]
+          "summary": "Brief explanation.",
+          "high_signal_quotes": ["Quote 1", "Quote 2", "Quote 3"],
+          "action_ideas": ["Action 1", "Action 2", "Action 3"]
         }}
       ]
     }}
     
-    IMPORTANT: Maximum 5 themes. If more exist, merge the least frequent ones. Enforce exactly 3 quotes per theme.
+    IMPORTANT: Maximum 5 themes. Enforce exactly 3 quotes and 3 action ideas per theme.
     """
 
     def __init__(self, model: str = "gpt-4o-mini", api_key: Optional[str] = None):
@@ -128,7 +138,8 @@ class ThemeClusteringEngine:
                 label="General Feedback",
                 review_count=len(reviews),
                 summary="Automated analysis failed. General review aggregation.",
-                high_signal_quotes=["Review analysis failed.", "No quotes available.", "Please check logs."]
+                high_signal_quotes=["Review analysis failed.", "No quotes available.", "Please check logs."],
+                action_ideas=["Fix the extraction pipeline.", "Check OpenAI API status.", "Verify input review format."]
             )
             return [dummy_theme]
 
