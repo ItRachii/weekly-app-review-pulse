@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from src.ingestion import ReviewSchema
 
 # Use the library for Android as it is more robust, if it works
@@ -13,7 +13,9 @@ try:
 except ImportError:
     HAS_PLAY_SCRAPER = False
 
-logger = logging.getLogger(__name__)
+from utils.logger import setup_logger
+
+logger = setup_logger("scraper_engine")
 
 class ScraperEngine:
     """

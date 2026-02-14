@@ -1,12 +1,13 @@
-import os
+﻿import os
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from src.scraper_engine import ScraperEngine
 from src.theme_engine import ThemeClusteringEngine
 from src.report_generator import PulseReportGenerator
 from src.email_generator import EmailGenerator
+from src.data_manager import DataManager
 from utils.logger import setup_logger
 
 logger = setup_logger("orchestrator")
@@ -28,6 +29,7 @@ class PulseOrchestrator:
 
     def __init__(self, weeks_back: int = 12):
         self.weeks_back = weeks_back
+        self.db = DataManager()
         os.makedirs('data/raw', exist_ok=True)
         os.makedirs('data/processed', exist_ok=True)
 
@@ -83,21 +85,63 @@ class PulseOrchestrator:
             return {"status": "skipped", "reason": msg}
 
         try:
-            # 1. Scrape & Clean
-            logger.info("Stage 1/4: Scraping and Cleansing...")
-            scraper = ScraperEngine(start_date=start_date, end_date=end_date, weeks_back=self.weeks_back)
-            ios_reviews = scraper.scrape_app_store(app_id="1404871703")
-            android_reviews = scraper.scrape_play_store(package_name="com.groww", count=150)
-            all_reviews = ios_reviews + android_reviews
+            # 0. Handle Date Defaults
+            current_end = end_date or datetime.now()
+            current_start = start_date or (current_end - timedelta(weeks=self.weeks_back))
+
+            # 1. Incremental Scrape & Clean
+            logger.info(f"Stage 1/4: Intelligent Scraping ({current_start.date()} to {current_end.date()})...")
+            
+            platforms = [
+                {"name": "ios", "id": "1404871703"},
+                {"name": "android", "id": "com.groww"}
+            ]
+            
+            for platform in platforms:
+                missing_ranges = self.db.get_missing_ranges(current_start, current_end, platform["name"])
+                
+                # Check if this is the first time for this platform
+                if len(missing_ranges) == 1 and missing_ranges[0] == (current_start, current_end):
+                    has_history = self.db.has_platform_history(platform["name"])
+                    if not has_history:
+                        logger.info(f"Initial run detected for {platform['name']}. Performing full sync for the requested range.")
+                
+                if not missing_ranges:
+                    logger.info(f"Cache Hit: All data for {platform['name']} is already available.")
+                    continue
+                
+                for m_start, m_end in missing_ranges:
+                    logger.info(f"Scraping {platform['name']} for missing range: {m_start.date()} to {m_end.date()}")
+                    scraper = ScraperEngine(start_date=m_start, end_date=m_end)
+                    
+                    if platform["name"] == "ios":
+                        new_reviews = scraper.scrape_app_store(app_id=platform["id"])
+                    else:
+                        # Increased count to 500 for better date range coverage on popular apps
+                        new_reviews = scraper.scrape_play_store(package_name=platform["id"], count=500)
+                    
+                    if new_reviews:
+                        saved = self.db.save_reviews(new_reviews)
+                        logger.info(f"Saved {saved}/{len(new_reviews)} new reviews for {platform['name']}")
+                    else:
+                        logger.info(f"No new reviews found for {platform['name']} in this sub-range.")
+                    
+                    # Mark as scraped regardless of finding reviews, so we don't infinitely retry empty days.
+                    # But we trust DataManager.save_reviews wouldn't crash.
+                    self.db.mark_scraped(platform["name"], m_start, m_end)
+
+            # 2. Fetch all reviews (Cached + Just Scraped) for the requested range
+            all_reviews = self.db.get_cached_reviews(current_start, current_end)
             
             if not all_reviews:
-                raise PulsePipelineError("No reviews found during scraping.", "Scraping")
+                raise PulsePipelineError("No reviews found in the requested date range.", "Scraping")
 
+            logger.info(f"Total reviews for analysis: {len(all_reviews)}")
             reviews_path = f"data/raw/reviews_{run_id}.json"
             with open(reviews_path, 'w', encoding='utf-8') as f:
                 json.dump(all_reviews, f, indent=2, default=str)
 
-            # 2. Cluster
+            # 3. Cluster
             logger.info("Stage 2/4: Clustering Themes...")
             engine = ThemeClusteringEngine()
             themes_objs = engine.cluster_reviews(all_reviews)
@@ -107,7 +151,7 @@ class PulseOrchestrator:
             with open(analysis_path, 'w', encoding='utf-8') as f:
                 json.dump(themes, f, indent=2)
 
-            # 3. Generate Reports
+            # 4. Generate Reports
             logger.info("Stage 3/4: Generating Reports...")
             report_gen = PulseReportGenerator()
             pulse_note = report_gen.generate_note(themes)
@@ -122,6 +166,7 @@ class PulseOrchestrator:
             with open(email_path, 'w', encoding='utf-8') as f:
                 f.write(email_html)
 
+            # 5. Finalize
             if not is_custom_run:
                 self._mark_week_completed()
             
@@ -137,7 +182,7 @@ class PulseOrchestrator:
                     "email_html": email_path
                 }
             }
-            logger.info(f"Pipeline completed successfully for {self._get_week_id()}")
+            logger.info(f"Pipeline completed successfully for {run_id}")
             return result
 
         except Exception as e:
@@ -145,3 +190,39 @@ class PulseOrchestrator:
             error_msg = f"Pipeline failed at stage [{stage}]: {str(e)}"
             logger.error(error_msg)
             return {"status": "failed", "error": error_msg, "stage": stage}
+
+    def purge_all_data(self):
+        """
+        Completely purges all reviews, reports, logs, and database records.
+        """
+        logger.warning("Initiating full data purge...")
+        
+        # 1. Clear Files
+        dirs_to_clean = ['data/raw', 'data/processed']
+        for d in dirs_to_clean:
+            if os.path.exists(d):
+                for f in os.listdir(d):
+                    file_path = os.path.join(d, f)
+                    try:
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                    except Exception as e:
+                        logger.error(f"Failed to delete {file_path}: {e}")
+
+        # 2. Reset Database
+        self.db.reset_database()
+
+        # 3. Truncate Logs
+        log_path = 'logs/pulse_pipeline.log'
+        if os.path.exists(log_path):
+            try:
+                # Open in write mode and immediately close to truncate
+                with open(log_path, 'w'):
+                    pass
+            except Exception as e:
+                logger.error(f"Failed to truncate logs: {e}")
+                
+        logger.info("Full data purge completed successfully.")
+        return True
+
+

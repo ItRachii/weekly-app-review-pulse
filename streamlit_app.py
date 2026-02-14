@@ -2,12 +2,22 @@ import streamlit as st
 import os
 from datetime import datetime, timedelta
 from src.orchestrator import PulseOrchestrator
+from src.email_service import EmailService
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Groww Pulse Report", page_icon="📈", layout="wide")
 
 st.title("🌱 Groww - Weekly App Review Pulse")
 st.markdown("Automated sentiment analysis and executive reporting for app store reviews.")
+
+# Custom CSS to hide the chevron icon in popovers
+st.markdown("""
+    <style>
+    [data-testid="stPopover"] svg {
+        display: none !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # Sidebar for configuration
 with st.sidebar:
@@ -41,6 +51,21 @@ with st.sidebar:
                 else:
                     st.error(f"Pipeline failed: {result.get('error', 'Unknown error')}")
 
+    st.divider()
+    st.header("🛠️ Maintenance")
+    with st.popover("🗑️ Purge All History", use_container_width=True):
+        st.error("⚠️ This action will permanently delete all reviews, reports, logs, and database records.")
+        st.write("To confirm, please type **delete** below:")
+        confirm_text = st.text_input("Confirmation", placeholder="delete", label_visibility="collapsed")
+        
+        if st.button("🔥 Confirm Full Purge", type="primary", disabled=confirm_text.lower() != "delete", use_container_width=True):
+            with st.spinner("Purging all data..."):
+                orchestrator = PulseOrchestrator()
+                if orchestrator.purge_all_data():
+                    st.session_state.clear()
+                    st.success("All data has been purged successfully!")
+                    st.rerun()
+
 # Main content area
 if 'latest_result' in st.session_state:
     res = st.session_state['latest_result']
@@ -69,10 +94,17 @@ if 'latest_result' in st.session_state:
         target_email = st.text_input("Enter recipient email:")
         if st.button("📧 Send Email", use_container_width=True):
             if target_email:
-                # In a real app, this would trigger an SMTP call or SendGrid API
-                st.info(f"Simulation: Sending report to {target_email}...")
-                st.balloons()
-                st.success(f"Email successfully 'sent' to {target_email}!")
+                with st.spinner("Sending email..."):
+                    success = EmailService.send_email(
+                        to_email=target_email,
+                        subject=f"[GROWW] Weekly App Review Pulse - {datetime.now().strftime('%B %d, %Y')}",
+                        html_content=html_content
+                    )
+                    if success:
+                        st.balloons()
+                        st.success(f"Email successfully sent to {target_email}!")
+                    else:
+                        st.error("Failed to send email. Please check your SMTP configuration.")
             else:
                 st.warning("Please enter a valid email address.")
         

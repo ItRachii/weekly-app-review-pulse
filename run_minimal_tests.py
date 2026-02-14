@@ -37,12 +37,53 @@ def test_orchestrator_initialization():
     assert os.path.exists('data/processed')
     print("Orchestrator Passed")
 
+def test_data_manager():
+    print("Testing DataManager...")
+    from src.data_manager import DataManager
+    from datetime import datetime, timedelta
+    
+    test_db = "data/test_pulse.db"
+    if os.path.exists(test_db):
+        os.remove(test_db)
+    
+    try:
+        db = DataManager()
+        db.DB_PATH = test_db
+        db._init_db()
+        
+        # Test Save/Get
+        reviews = [{"platform": "ios", "rating": 5, "reviewText": "Test", "date": datetime.now()}]
+        db.save_reviews(reviews)
+        cached = db.get_cached_reviews(datetime.now() - timedelta(days=1), datetime.now() + timedelta(days=1))
+        assert len(cached) >= 1
+        
+        # Test Missing Ranges
+        start = datetime(2024, 1, 1)
+        end = datetime(2024, 1, 5)
+        ranges = db.get_missing_ranges(start, end, "ios")
+        assert len(ranges) == 1
+        
+        db.mark_scraped("ios", datetime(2024, 1, 2), datetime(2024, 1, 3))
+        ranges = db.get_missing_ranges(start, end, "ios")
+        assert len(ranges) == 2 # 1st and 4-5th
+        
+        print("DataManager Passed")
+    finally:
+        try:
+            if os.path.exists(test_db):
+                os.remove(test_db)
+        except PermissionError:
+            pass # On Windows, SQLite sometimes holds the lock for a few ms longer
+
 if __name__ == "__main__":
     try:
         test_pii_cleaning()
         test_schema_validation()
-        test_orchestrator_initialization()
+        test_data_manager()
+        test_orchestrator_initialization() # Kept original function name
         print("\nALL MINIMAL TESTS PASSED SUCCESSFULLY")
     except Exception as e:
-        print(f"\nTEST FAILED: {str(e)}")
+        print(f"\nTESTS FAILED: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
