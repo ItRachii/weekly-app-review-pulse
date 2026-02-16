@@ -7,6 +7,12 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Groww Pulse Report", page_icon="📈", layout="wide")
 
+@st.cache_resource
+def get_orchestrator():
+    return PulseOrchestrator()
+
+orchestrator = get_orchestrator()
+
 st.title("🌱 Groww - Weekly App Review Pulse")
 st.markdown("Automated sentiment analysis and executive reporting for app store reviews.")
 
@@ -23,7 +29,7 @@ with st.sidebar:
             st.error("Error: Start date must be before end date.")
         else:
             with st.spinner("Executing Pulse Pipeline..."):
-                orchestrator = PulseOrchestrator()
+                # Uses the cached orchestrator from module level
                 # Convert date to datetime
                 dt_start = datetime.combine(start_date, datetime.min.time())
                 dt_end = datetime.combine(end_date, datetime.max.time())
@@ -64,7 +70,6 @@ with st.sidebar:
             with c1:
                 if st.button("🔥 Confirm Full Purge", type="primary", disabled=st.session_state.get("purge_val", "").lower() != "delete", use_container_width=True):
                     with st.spinner("Purging all data..."):
-                        orchestrator = PulseOrchestrator()
                         if orchestrator.purge_all_data():
                             st.session_state.clear()
                             st.success("All data has been purged successfully!")

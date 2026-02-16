@@ -4,9 +4,6 @@ from typing import Optional
 from src.orchestrator import PulseOrchestrator
 from src.email_service import EmailService
 from datetime import datetime
-import pandas as pd
-import io
-import json
 import os
 
 router = APIRouter()

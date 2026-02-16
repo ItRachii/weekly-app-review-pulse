@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from typing import List, Dict, Any
@@ -91,5 +92,3 @@ class PulseReportGenerator:
         if last_period != -1:
              return truncated[:last_period+1] + "\n\n[Note: Truncated for brevity to stay under 250 words.]"
         return truncated + "...\n\n[Note: Truncated for brevity to stay under 250 words.]"
-
-import json # Ensure json is available for the class method
