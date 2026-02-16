@@ -4,8 +4,94 @@ from datetime import datetime, timedelta
 from src.orchestrator import PulseOrchestrator
 from src.email_service import EmailService
 import streamlit.components.v1 as components
+from PIL import Image
 
-st.set_page_config(page_title="Groww Pulse Report", page_icon="📈", layout="wide")
+groww_icon = Image.open("assets/groww_logo.png")
+st.set_page_config(page_title="Groww Pulse Report", page_icon=groww_icon, layout="wide")
+
+# --- Groww Brand Theme CSS ---
+st.markdown("""
+<style>
+    /* ===== Groww Brand Colors =====
+       Groww Blue:            #5367F5
+       Groww Green (Logo):    #08F6B6
+       Groww Green (Primary): #00D09C
+       Groww Accent Blue A:   #B1D0FB
+       Groww Accent Blue B:   #E5F4FD
+    */
+
+    /* Primary buttons */
+    .stButton > button[kind="primary"],
+    div[data-testid="stFormSubmitButton"] > button {
+        background-color: #00D09C !important;
+        border-color: #00D09C !important;
+        color: #FFFFFF !important;
+    }
+    .stButton > button[kind="primary"]:hover,
+    div[data-testid="stFormSubmitButton"] > button:hover {
+        background-color: #08F6B6 !important;
+        border-color: #08F6B6 !important;
+    }
+
+    /* Secondary / default buttons */
+    .stButton > button:not([kind="primary"]) {
+        border-color: #00D09C !important;
+        color: #0B0B21 !important;
+    }
+    .stButton > button:not([kind="primary"]):hover {
+        background-color: #EBFCF4 !important;
+        border-color: #00D09C !important;
+    }
+
+    /* Title styling */
+    h1 {
+        color: #0B0B21 !important;
+    }
+
+    /* Sidebar header */
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2 {
+        color: #5367F5 !important;
+    }
+
+    /* Dividers */
+    hr {
+        border-color: #B1D0FB !important;
+    }
+
+    /* Links and accents */
+    a {
+        color: #5367F5 !important;
+    }
+
+    /* Success alerts */
+    div[data-testid="stAlert"][data-baseweb="notification"]:has([data-testid="stNotificationContentSuccess"]) {
+        background-color: #EBFCF4 !important;
+        border-left-color: #00D09C !important;
+    }
+
+    /* Error alerts */
+    div[data-testid="stAlert"][data-baseweb="notification"]:has([data-testid="stNotificationContentError"]) {
+        border-left-color: #5367F5 !important;
+    }
+
+    /* Metric value */
+    [data-testid="stMetricValue"] {
+        color: #00D09C !important;
+    }
+
+    /* Bordered containers */
+    [data-testid="stVerticalBlock"] > div[data-testid="stExpander"],
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-color: #B1D0FB !important;
+    }
+
+    /* Spinner */
+    .stSpinner > div {
+        border-top-color: #00D09C !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 @st.cache_resource
 def get_orchestrator():
@@ -13,8 +99,12 @@ def get_orchestrator():
 
 orchestrator = get_orchestrator()
 
-st.title("🌱 Groww - Weekly App Review Pulse")
-st.markdown("Automated sentiment analysis and executive reporting for app store reviews.")
+logo_col, title_col = st.columns([0.08, 0.92], vertical_alignment="center")
+with logo_col:
+    st.image("assets/groww_logo.png", width=80)
+with title_col:
+    st.title("Groww - Weekly App Review Pulse")
+    st.markdown("Automated sentiment analysis and executive reporting for app store reviews.")
 
 # Sidebar for configuration
 with st.sidebar:
