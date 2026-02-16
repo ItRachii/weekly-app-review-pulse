@@ -62,17 +62,17 @@ An automated sentiment analysis and executive reporting pipeline for app store r
 │                   │   (SQLite DB)        │                          │
 │                   └──────────┬───────────┘                          │
 │                              ▼                                      │
-│                   ┌──────────────────────┐                          │
-│                   │ ThemeClusteringEngine │                          │
-│                   │ (GPT-4o-mini)        │                          │
-│                   └──────────┬───────────┘                          │
+│                   ┌───────────────────────┐                         │
+│                   │ ThemeClusteringEngine │                         │
+│                   │ (GPT-4o-mini)         │                         │
+│                   └──────────┬────────────┘                         │
 │                              ▼                                      │
 │                ┌─────────────┴─────────────┐                        │
 │                ▼                           ▼                        │
-│   ┌──────────────────┐       ┌──────────────────────┐              │
-│   │ PulseReportGen   │       │   EmailGenerator     │              │
-│   │ (Markdown Note)  │       │   (HTML Email)       │              │
-│   └──────────────────┘       └──────────────────────┘              │
+│   ┌──────────────────┐       ┌─────────────────────┐                │
+│   │ PulseReportGen   │       │   EmailGenerator    │                │
+│   │ (Markdown Note)  │       │   (HTML Email)      │                │
+│   └──────────────────┘       └─────────────────────┘                │
 │                                        │                            │
 │                                        ▼                            │
 │                              ┌──────────────────┐                   │
