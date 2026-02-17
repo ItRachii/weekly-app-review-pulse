@@ -351,10 +351,10 @@ Runs the full scrape → clean → cluster → report pipeline **synchronously**
   "status": "success",
   "reviews_count": 142,
   "themes_count": 5,
-  "run_id": "custom_20260216_234027",
+  "run_id": "custom_20260209_20260216_234027",
   "artifacts": {
-    "email_html": "data/processed/pulse_email_custom_20260216_234027.html",
-    "pulse_note": "data/processed/pulse_note_custom_20260216_234027.md"
+    "email_html": "data/processed/pulse_email_custom_20260209_20260216_234027.html",
+    "pulse_note": "data/processed/pulse_note_custom_20260209_20260216_234027.md"
   }
 }
 ```
@@ -390,7 +390,7 @@ Returns all generated reports with metadata (filename, type, date, size).
 {
   "reports": [
     {
-      "filename": "pulse_email_custom_20260216_234027.html",
+      "filename": "pulse_email_custom_20260209_20260216_234027.html",
       "type": "html",
       "modified_at": "2026-02-16T23:40:48.567924",
       "size_bytes": 3075
@@ -412,7 +412,7 @@ Returns the content of a specific report file. Used by the dashboard for preview
 
 | Parameter | Type | Description |
 |:---|:---|:---|
-| `filename` | path | Report filename (e.g., `pulse_email_custom_20260216_234027.html`) |
+| `filename` | path | Report filename (e.g., `pulse_email_custom_20260209_20260216_234027.html`) |
 
 **Response:** Raw file content with appropriate `Content-Type` (`text/html` or `text/markdown`).
 
@@ -460,7 +460,7 @@ Sends a previously generated HTML report via SMTP.
 {
   "to_email": "manager@company.com",
   "subject": "[GROWW] Weekly Pulse — Feb 16, 2026",
-  "report_file": "pulse_email_custom_20260216_234027.html"
+  "report_file": "pulse_email_custom_20260209_20260216_234027.html"
 }
 ```
 
@@ -473,7 +473,7 @@ Sends a previously generated HTML report via SMTP.
 **Response:**
 
 ```json
-{ "status": "sent", "to": "manager@company.com", "report": "pulse_email_custom_20260216_234027.html" }
+{ "status": "sent", "to": "manager@company.com", "report": "pulse_email_custom_20260209_20260216_234027.html" }
 ```
 
 ---

@@ -74,10 +74,22 @@ class PulseOrchestrator:
         :param start_date: Optional start date for scraping.
         :param end_date: Optional end date for scraping.
         """
+        # 0. Handle Date Defaults
+        current_end = end_date or datetime.now()
+        current_start = start_date or (current_end - timedelta(weeks=self.weeks_back))
+
         # If dates are provided, we skip the standard week-based idempotency check
         # and treat it as a custom run.
         is_custom_run = start_date is not None or end_date is not None
-        run_id = self._get_week_id() if not is_custom_run else f"custom_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        if is_custom_run:
+            # Format: custom_START_END_TIMESTAMP
+            timestamp = datetime.now().strftime('%H%M%S')
+            start_str = current_start.strftime('%Y%m%d')
+            end_str = current_end.strftime('%Y%m%d')
+            run_id = f"custom_{start_str}_{end_str}_{timestamp}"
+        else:
+            run_id = self._get_week_id()
 
         if not force and not is_custom_run and self._already_run_this_week():
             msg = f"Pipeline already run for {run_id}. Use force=True to override."
@@ -85,9 +97,7 @@ class PulseOrchestrator:
             return {"status": "skipped", "reason": msg}
 
         try:
-            # 0. Handle Date Defaults
-            current_end = end_date or datetime.now()
-            current_start = start_date or (current_end - timedelta(weeks=self.weeks_back))
+            # 1. Incremental Scrape & Clean
 
             # 1. Incremental Scrape & Clean
             logger.info(f"Stage 1/4: Intelligent Scraping ({current_start.date()} to {current_end.date()})...")
