@@ -92,6 +92,11 @@ st.markdown("""
     .stSpinner > div {
         border-top-color: #00D09C !important;
     }
+
+    /* Hide fullscreen button on logo image */
+    [data-testid="stImage"] button {
+        display: none !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
