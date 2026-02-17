@@ -1,10 +1,12 @@
 import streamlit as st
+import requests
 import os
 from datetime import datetime, timedelta
-from src.orchestrator import PulseOrchestrator
-from src.email_service import EmailService
 import streamlit.components.v1 as components
 from PIL import Image
+
+# --- App Config ---
+API_BASE_URL = "http://localhost:8000/api/v1"
 
 groww_icon = Image.open("assets/groww_logo.png")
 st.set_page_config(page_title="Groww Pulse Report", page_icon=groww_icon, layout="wide")
@@ -93,12 +95,51 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_resource
-def get_orchestrator():
-    return PulseOrchestrator()
 
-orchestrator = get_orchestrator()
+# --- Helper: API calls ---
+def api_get(endpoint):
+    """GET request to the API."""
+    try:
+        resp = requests.get(f"{API_BASE_URL}{endpoint}", timeout=30)
+        resp.raise_for_status()
+        return resp
+    except requests.ConnectionError:
+        st.error("⚠️ Cannot connect to API server. Make sure `python main_api.py` is running on port 8000.")
+        return None
+    except requests.RequestException as e:
+        st.error(f"API error: {e}")
+        return None
 
+
+def api_post(endpoint, json_data=None):
+    """POST request to the API."""
+    try:
+        resp = requests.post(f"{API_BASE_URL}{endpoint}", json=json_data, timeout=120)
+        resp.raise_for_status()
+        return resp
+    except requests.ConnectionError:
+        st.error("⚠️ Cannot connect to API server. Make sure `python main_api.py` is running on port 8000.")
+        return None
+    except requests.HTTPException as e:
+        st.error(f"API error: {e}")
+        return None
+
+
+def api_delete(endpoint, headers=None):
+    """DELETE request to the API."""
+    try:
+        resp = requests.delete(f"{API_BASE_URL}{endpoint}", headers=headers, timeout=30)
+        resp.raise_for_status()
+        return resp
+    except requests.ConnectionError:
+        st.error("⚠️ Cannot connect to API server. Make sure `python main_api.py` is running on port 8000.")
+        return None
+    except requests.RequestException as e:
+        st.error(f"API error: {e}")
+        return None
+
+
+# --- Page Header ---
 logo_col, title_col = st.columns([0.08, 0.92], vertical_alignment="center")
 with logo_col:
     st.image("assets/groww_logo.png", width=80)
@@ -106,44 +147,37 @@ with title_col:
     st.title("Groww - Weekly App Review Pulse")
     st.markdown("Automated sentiment analysis and executive reporting for app store reviews.")
 
-# Sidebar for configuration
+# --- Sidebar ---
 with st.sidebar:
     st.header("Pipeline Configuration")
-    
+
     # Date Range Selection
     start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=7))
     end_date = st.date_input("End Date", value=datetime.now())
-    
+
     if st.button("🚀 Generate Pulse Report", use_container_width=True):
         if start_date > end_date:
             st.error("Error: Start date must be before end date.")
         else:
             with st.spinner("Executing Pulse Pipeline..."):
-                # Uses the cached orchestrator from module level
-                # Convert date to datetime
-                dt_start = datetime.combine(start_date, datetime.min.time())
-                dt_end = datetime.combine(end_date, datetime.max.time())
-                
-                result = orchestrator.run_pipeline(
-                    start_date=dt_start,
-                    end_date=dt_end
-                )
-                
-                if result["status"] == "success":
-                    st.success(f"Pipeline completed! Processed {result['reviews_count']} reviews.")
-                    st.session_state['latest_result'] = result
-                else:
-                    st.error(f"Pipeline failed: {result.get('error', 'Unknown error')}")
+                resp = api_post("/trigger", json_data={
+                    "start_date": start_date.isoformat(),
+                    "end_date": end_date.isoformat(),
+                    "force": False
+                })
+                if resp:
+                    result = resp.json()
+                    if result.get("status") == "success":
+                        st.success(f"Pipeline completed! Processed {result['reviews_count']} reviews.")
+                        st.session_state['latest_result'] = result
+                    else:
+                        st.error(f"Pipeline failed: {result.get('error', 'Unknown error')}")
 
-    # --- Maintenance Section (Senior Engineer Refinement) ---
-    # --- Maintenance Section (Senior Engineer Structural Refinement) ---
+    # --- Maintenance Section ---
     st.divider()
     st.header("🛠️ Maintenance")
 
-    # This 'Senior' approach uses a standard button to avoid the popover chevron
-    # AND allow us to catch the click event in Python to reset the state.
     if st.button("🗑️ Purge All History", use_container_width=True):
-        # Reset the input value whenever the button is clicked to start fresh
         st.session_state.purge_val = ""
         st.session_state.show_maintenance_drawer = not st.session_state.get('show_maintenance_drawer', False)
 
@@ -151,16 +185,15 @@ with st.sidebar:
         with st.container(border=True):
             st.error("⚠️ Critical Action: Purging all data.")
             st.write("To confirm, please type **delete** below:")
-            
-            # 1. The Input: Keyed to purge_val
+
             st.text_input("Confirm Delete", placeholder="delete", label_visibility="collapsed", key="purge_val")
-            
-            # 2. Buttons: Secure via Python check + visual reactivity via JS
+
             c1, c2 = st.columns(2)
             with c1:
                 if st.button("🔥 Confirm Full Purge", type="primary", disabled=st.session_state.get("purge_val", "").lower() != "delete", use_container_width=True):
                     with st.spinner("Purging all data..."):
-                        if orchestrator.purge_all_data():
+                        resp = api_delete("/purge", headers={"X-Confirm-Purge": "delete"})
+                        if resp:
                             st.session_state.clear()
                             st.success("All data has been purged successfully!")
                             st.rerun()
@@ -168,8 +201,8 @@ with st.sidebar:
                 if st.button("❌ Cancel", use_container_width=True):
                     st.session_state.show_maintenance_drawer = False
                     st.rerun()
-            
-            # 3. JS Bridge: Provides the 'Live Reactivity' (Senior UX)
+
+            # JS Bridge: Live reactivity for purge confirmation
             components.html(
                 f"""
                 <script>
@@ -186,55 +219,60 @@ with st.sidebar:
                         }});
                     }}
                 }};
-                // Run periodically to catch the container rendering
                 setInterval(check, 300);
                 </script>
                 """,
                 height=0
             )
 
-# Main content area
+# --- Main Content Area ---
 if 'latest_result' in st.session_state:
     res = st.session_state['latest_result']
-    
+
     col1, col2 = st.columns([2, 1])
-    
+
     with col1:
         st.header("📧 Draft Email Report")
-        email_path = res['artifacts']['email_html']
-        if os.path.exists(email_path):
-            with open(email_path, 'r', encoding='utf-8') as f:
-                html_content = f.read()
-            
-            # Display HTML in a scrollable container
-            components.html(html_content, height=600, scrolling=True)
-            
-            st.download_button(
-                label="📥 Download HTML Email",
-                data=html_content,
-                file_name=os.path.basename(email_path),
-                mime="text/html"
-            )
-    
+        # Get email HTML content via API
+        email_filename = None
+        if res.get('artifacts', {}).get('email_html'):
+            email_filename = os.path.basename(res['artifacts']['email_html'])
+
+        if email_filename:
+            content_resp = api_get(f"/reports/{email_filename}")
+            if content_resp:
+                html_content = content_resp.text
+                components.html(html_content, height=600, scrolling=True)
+
+                st.download_button(
+                    label="📥 Download HTML Email",
+                    data=html_content,
+                    file_name=email_filename,
+                    mime="text/html"
+                )
+
     with col2:
         st.header("📤 Send Report")
         target_email = st.text_input("Enter recipient email:")
         if st.button("📧 Send Email", use_container_width=True):
-            if target_email:
+            if target_email and email_filename:
                 with st.spinner("Sending email..."):
-                    success = EmailService.send_email(
-                        to_email=target_email,
-                        subject=f"[GROWW] Weekly App Review Pulse - {datetime.now().strftime('%B %d, %Y')}",
-                        html_content=html_content
-                    )
-                    if success:
-                        st.balloons()
-                        st.success(f"Email successfully sent to {target_email}!")
-                    else:
-                        st.error("Failed to send email. Please check your SMTP configuration.")
-            else:
+                    resp = api_post("/send-email", json_data={
+                        "to_email": target_email,
+                        "report_file": email_filename
+                    })
+                    if resp:
+                        result = resp.json()
+                        if result.get("status") == "sent":
+                            st.balloons()
+                            st.success(f"Email successfully sent to {target_email}!")
+                        else:
+                            st.error("Failed to send email. Please check your SMTP configuration.")
+            elif not target_email:
                 st.warning("Please enter a valid email address.")
-        
+            else:
+                st.warning("No email report available to send.")
+
         st.divider()
         st.header("📊 Run Details")
         st.json({
@@ -245,13 +283,49 @@ if 'latest_result' in st.session_state:
         })
 else:
     st.info("Select a date range and click 'Generate Pulse Report' to get started.")
-    
-    # Show previous reports if any
-    st.subheader("Recent Artifacts")
-    processed_dir = "data/processed"
-    if os.path.exists(processed_dir):
-        files = [f for f in os.listdir(processed_dir) if f.endswith('.md')]
-        if files:
-            st.write(f"Found {len(files)} historical reports in {processed_dir}")
+
+    # --- Report History via API ---
+    st.subheader("📂 Report History")
+    reports_resp = api_get("/reports")
+
+    if reports_resp:
+        data = reports_resp.json()
+        reports = data.get("reports", [])
+
+        md_reports = [r for r in reports if r["type"] == "markdown"]
+        html_reports = [r for r in reports if r["type"] == "html"]
+
+        if md_reports or html_reports:
+            if md_reports:
+                st.markdown("**📝 Pulse Notes (Markdown)**")
+                for r in md_reports:
+                    mod_time = datetime.fromisoformat(r["modified_at"])
+                    date_label = mod_time.strftime("%b %d, %Y  •  %I:%M %p")
+
+                    col_name, col_date, col_dl = st.columns([3, 3, 1])
+                    with col_name:
+                        st.markdown(f"📄 `{r['filename']}`")
+                    with col_date:
+                        st.caption(f"🕒 {date_label}")
+                    with col_dl:
+                        content_resp = api_get(f"/reports/{r['filename']}")
+                        if content_resp:
+                            st.download_button("⬇", content_resp.text, file_name=r['filename'], mime="text/markdown", key=f"dl_md_{r['filename']}")
+
+            if html_reports:
+                st.markdown("**📧 Email Reports (HTML)**")
+                for r in html_reports:
+                    mod_time = datetime.fromisoformat(r["modified_at"])
+                    date_label = mod_time.strftime("%b %d, %Y  •  %I:%M %p")
+
+                    col_name, col_date, col_dl = st.columns([3, 3, 1])
+                    with col_name:
+                        st.markdown(f"📧 `{r['filename']}`")
+                    with col_date:
+                        st.caption(f"🕒 {date_label}")
+                    with col_dl:
+                        content_resp = api_get(f"/reports/{r['filename']}")
+                        if content_resp:
+                            st.download_button("⬇", content_resp.text, file_name=r['filename'], mime="text/html", key=f"dl_html_{r['filename']}")
         else:
-            st.write("No historical reports found yet.")
+            st.caption("No historical reports found yet. Generate your first pulse report to get started.")
