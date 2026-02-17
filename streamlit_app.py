@@ -91,14 +91,6 @@ st.markdown("""
     .stSpinner > div {
         border-top-color: #00D09C !important;
     }
-
-    /* Hide fullscreen button on images */
-    [data-testid="stImage"] button,
-    [data-testid="StyledFullScreenButton"],
-    button[title="View fullscreen"],
-    [data-testid="stImage"] [data-testid="StyledFullScreenButton"] {
-        display: none !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -113,7 +105,10 @@ orchestrator = get_orchestrator()
 # --- Page Header ---
 logo_col, title_col = st.columns([0.08, 0.92], vertical_alignment="center")
 with logo_col:
-    st.image("assets/groww_logo.png", width=80)
+    import base64
+    with open("assets/groww_logo.png", "rb") as img_file:
+        logo_b64 = base64.b64encode(img_file.read()).decode()
+    st.markdown(f'<img src="data:image/png;base64,{logo_b64}" width="80">', unsafe_allow_html=True)
 with title_col:
     st.title("Groww - Weekly App Review Pulse")
     st.markdown("Automated sentiment analysis and executive reporting for app store reviews.")
