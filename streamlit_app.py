@@ -92,8 +92,11 @@ st.markdown("""
         border-top-color: #00D09C !important;
     }
 
-    /* Hide fullscreen button on logo image */
-    [data-testid="stImage"] button {
+    /* Hide fullscreen button on images */
+    [data-testid="stImage"] button,
+    [data-testid="StyledFullScreenButton"],
+    button[title="View fullscreen"],
+    [data-testid="stImage"] [data-testid="StyledFullScreenButton"] {
         display: none !important;
     }
 </style>
