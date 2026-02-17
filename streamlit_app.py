@@ -155,7 +155,7 @@ with st.sidebar:
     start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=7))
     end_date = st.date_input("End Date", value=datetime.now())
 
-    if st.button("🚀 Generate Pulse Report", use_container_width=True):
+    if st.button("Generate Pulse Report", use_container_width=True):
         if start_date > end_date:
             st.error("Error: Start date must be before end date.")
         else:
@@ -177,7 +177,7 @@ with st.sidebar:
     st.divider()
     st.header("🛠️ Maintenance")
 
-    if st.button("🗑️ Purge All History", use_container_width=True):
+    if st.button("Purge All History", use_container_width=True):
         st.session_state.purge_val = ""
         st.session_state.show_maintenance_drawer = not st.session_state.get('show_maintenance_drawer', False)
 
@@ -190,7 +190,7 @@ with st.sidebar:
 
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("🔥 Confirm Full Purge", type="primary", disabled=st.session_state.get("purge_val", "").lower() != "delete", use_container_width=True):
+                if st.button("Confirm Full Purge", type="primary", disabled=st.session_state.get("purge_val", "").lower() != "delete", use_container_width=True):
                     with st.spinner("Purging all data..."):
                         resp = api_delete("/purge", headers={"X-Confirm-Purge": "delete"})
                         if resp:
@@ -198,7 +198,7 @@ with st.sidebar:
                             st.success("All data has been purged successfully!")
                             st.rerun()
             with c2:
-                if st.button("❌ Cancel", use_container_width=True):
+                if st.button("Cancel", use_container_width=True):
                     st.session_state.show_maintenance_drawer = False
                     st.rerun()
 
@@ -245,7 +245,7 @@ if 'latest_result' in st.session_state:
                 components.html(html_content, height=600, scrolling=True)
 
                 st.download_button(
-                    label="📥 Download HTML Email",
+                    label="Download HTML Email",
                     data=html_content,
                     file_name=email_filename,
                     mime="text/html"
@@ -254,7 +254,7 @@ if 'latest_result' in st.session_state:
     with col2:
         st.header("📤 Send Report")
         target_email = st.text_input("Enter recipient email:")
-        if st.button("📧 Send Email", use_container_width=True):
+        if st.button("Send Email", use_container_width=True):
             if target_email and email_filename:
                 with st.spinner("Sending email..."):
                     resp = api_post("/send-email", json_data={
