@@ -1,13 +1,12 @@
 import streamlit as st
-import requests
 import os
 from datetime import datetime, timedelta
 import streamlit.components.v1 as components
 from PIL import Image
+from src.orchestrator import PulseOrchestrator
+from src.email_service import EmailService
 
 # --- App Config ---
-API_BASE_URL = "http://localhost:8000/api/v1"
-
 groww_icon = Image.open("assets/groww_logo.png")
 st.set_page_config(page_title="Groww Pulse Report", page_icon=groww_icon, layout="wide")
 
@@ -101,48 +100,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# --- Helper: API calls ---
-def api_get(endpoint):
-    """GET request to the API."""
-    try:
-        resp = requests.get(f"{API_BASE_URL}{endpoint}", timeout=30)
-        resp.raise_for_status()
-        return resp
-    except requests.ConnectionError:
-        st.error("⚠️ Cannot connect to API server. Make sure `python main_api.py` is running on port 8000.")
-        return None
-    except requests.RequestException as e:
-        st.error(f"API error: {e}")
-        return None
+@st.cache_resource
+def get_orchestrator():
+    return PulseOrchestrator()
 
 
-def api_post(endpoint, json_data=None):
-    """POST request to the API."""
-    try:
-        resp = requests.post(f"{API_BASE_URL}{endpoint}", json=json_data, timeout=120)
-        resp.raise_for_status()
-        return resp
-    except requests.ConnectionError:
-        st.error("⚠️ Cannot connect to API server. Make sure `python main_api.py` is running on port 8000.")
-        return None
-    except requests.HTTPException as e:
-        st.error(f"API error: {e}")
-        return None
-
-
-def api_delete(endpoint, headers=None):
-    """DELETE request to the API."""
-    try:
-        resp = requests.delete(f"{API_BASE_URL}{endpoint}", headers=headers, timeout=30)
-        resp.raise_for_status()
-        return resp
-    except requests.ConnectionError:
-        st.error("⚠️ Cannot connect to API server. Make sure `python main_api.py` is running on port 8000.")
-        return None
-    except requests.RequestException as e:
-        st.error(f"API error: {e}")
-        return None
-
+orchestrator = get_orchestrator()
 
 # --- Page Header ---
 logo_col, title_col = st.columns([0.08, 0.92], vertical_alignment="center")
@@ -165,18 +128,19 @@ with st.sidebar:
             st.error("Error: Start date must be before end date.")
         else:
             with st.spinner("Executing Pulse Pipeline..."):
-                resp = api_post("/trigger", json_data={
-                    "start_date": start_date.isoformat(),
-                    "end_date": end_date.isoformat(),
-                    "force": False
-                })
-                if resp:
-                    result = resp.json()
-                    if result.get("status") == "success":
-                        st.success(f"Pipeline completed! Processed {result['reviews_count']} reviews.")
-                        st.session_state['latest_result'] = result
-                    else:
-                        st.error(f"Pipeline failed: {result.get('error', 'Unknown error')}")
+                dt_start = datetime.combine(start_date, datetime.min.time())
+                dt_end = datetime.combine(end_date, datetime.max.time())
+
+                result = orchestrator.run_pipeline(
+                    start_date=dt_start,
+                    end_date=dt_end
+                )
+
+                if result["status"] == "success":
+                    st.success(f"Pipeline completed! Processed {result['reviews_count']} reviews.")
+                    st.session_state['latest_result'] = result
+                else:
+                    st.error(f"Pipeline failed: {result.get('error', 'Unknown error')}")
 
     # --- Maintenance Section ---
     st.divider()
@@ -197,8 +161,7 @@ with st.sidebar:
             with c1:
                 if st.button("Confirm Full Purge", type="primary", disabled=st.session_state.get("purge_val", "").lower() != "delete", use_container_width=True):
                     with st.spinner("Purging all data..."):
-                        resp = api_delete("/purge", headers={"X-Confirm-Purge": "delete"})
-                        if resp:
+                        if orchestrator.purge_all_data():
                             st.session_state.clear()
                             st.success("All data has been purged successfully!")
                             st.rerun()
@@ -238,41 +201,36 @@ if 'latest_result' in st.session_state:
 
     with col1:
         st.header("📧 Draft Email Report")
-        # Get email HTML content via API
-        email_filename = None
-        if res.get('artifacts', {}).get('email_html'):
-            email_filename = os.path.basename(res['artifacts']['email_html'])
+        email_path = res.get('artifacts', {}).get('email_html', '')
+        if email_path and os.path.exists(email_path):
+            with open(email_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
 
-        if email_filename:
-            content_resp = api_get(f"/reports/{email_filename}")
-            if content_resp:
-                html_content = content_resp.text
-                components.html(html_content, height=600, scrolling=True)
+            components.html(html_content, height=600, scrolling=True)
 
-                st.download_button(
-                    label="Download HTML Email",
-                    data=html_content,
-                    file_name=email_filename,
-                    mime="text/html"
-                )
+            st.download_button(
+                label="Download HTML Email",
+                data=html_content,
+                file_name=os.path.basename(email_path),
+                mime="text/html"
+            )
 
     with col2:
         st.header("📤 Send Report")
         target_email = st.text_input("Enter recipient email:")
         if st.button("Send Email", use_container_width=True):
-            if target_email and email_filename:
+            if target_email and email_path and os.path.exists(email_path):
                 with st.spinner("Sending email..."):
-                    resp = api_post("/send-email", json_data={
-                        "to_email": target_email,
-                        "report_file": email_filename
-                    })
-                    if resp:
-                        result = resp.json()
-                        if result.get("status") == "sent":
-                            st.balloons()
-                            st.success(f"Email successfully sent to {target_email}!")
-                        else:
-                            st.error("Failed to send email. Please check your SMTP configuration.")
+                    success = EmailService.send_email(
+                        to_email=target_email,
+                        subject=f"[GROWW] Weekly App Review Pulse - {datetime.now().strftime('%B %d, %Y')}",
+                        html_content=html_content
+                    )
+                    if success:
+                        st.balloons()
+                        st.success(f"Email successfully sent to {target_email}!")
+                    else:
+                        st.error("Failed to send email. Please check your SMTP configuration.")
             elif not target_email:
                 st.warning("Please enter a valid email address.")
             else:
@@ -289,48 +247,54 @@ if 'latest_result' in st.session_state:
 else:
     st.info("Select a date range and click 'Generate Pulse Report' to get started.")
 
-    # --- Report History via API ---
+    # --- Report History ---
     st.subheader("📂 Report History")
-    reports_resp = api_get("/reports")
+    processed_dir = "data/processed"
+    if os.path.exists(processed_dir):
+        md_files = sorted(
+            [f for f in os.listdir(processed_dir) if f.endswith('.md')],
+            key=lambda f: os.path.getmtime(os.path.join(processed_dir, f)),
+            reverse=True
+        )
+        html_files = sorted(
+            [f for f in os.listdir(processed_dir) if f.endswith('.html')],
+            key=lambda f: os.path.getmtime(os.path.join(processed_dir, f)),
+            reverse=True
+        )
 
-    if reports_resp:
-        data = reports_resp.json()
-        reports = data.get("reports", [])
-
-        md_reports = [r for r in reports if r["type"] == "markdown"]
-        html_reports = [r for r in reports if r["type"] == "html"]
-
-        if md_reports or html_reports:
-            if md_reports:
+        if md_files or html_files:
+            if md_files:
                 st.markdown("**📝 Pulse Notes (Markdown)**")
-                for r in md_reports:
-                    mod_time = datetime.fromisoformat(r["modified_at"])
+                for f in md_files:
+                    fpath = os.path.join(processed_dir, f)
+                    mod_time = datetime.fromtimestamp(os.path.getmtime(fpath))
                     date_label = mod_time.strftime("%b %d, %Y  •  %I:%M %p")
 
                     col_name, col_date, col_dl = st.columns([3, 3, 1])
                     with col_name:
-                        st.markdown(f"📄 `{r['filename']}`")
+                        st.markdown(f"📄 `{f}`")
                     with col_date:
                         st.caption(f"🕒 {date_label}")
                     with col_dl:
-                        content_resp = api_get(f"/reports/{r['filename']}")
-                        if content_resp:
-                            st.download_button("⬇", content_resp.text, file_name=r['filename'], mime="text/markdown", key=f"dl_md_{r['filename']}")
+                        with open(fpath, 'r', encoding='utf-8') as fp:
+                            st.download_button("⬇", fp.read(), file_name=f, mime="text/markdown", key=f"dl_md_{f}")
 
-            if html_reports:
+            if html_files:
                 st.markdown("**📧 Email Reports (HTML)**")
-                for r in html_reports:
-                    mod_time = datetime.fromisoformat(r["modified_at"])
+                for f in html_files:
+                    fpath = os.path.join(processed_dir, f)
+                    mod_time = datetime.fromtimestamp(os.path.getmtime(fpath))
                     date_label = mod_time.strftime("%b %d, %Y  •  %I:%M %p")
 
                     col_name, col_date, col_dl = st.columns([3, 3, 1])
                     with col_name:
-                        st.markdown(f"📧 `{r['filename']}`")
+                        st.markdown(f"📧 `{f}`")
                     with col_date:
                         st.caption(f"🕒 {date_label}")
                     with col_dl:
-                        content_resp = api_get(f"/reports/{r['filename']}")
-                        if content_resp:
-                            st.download_button("⬇", content_resp.text, file_name=r['filename'], mime="text/html", key=f"dl_html_{r['filename']}")
+                        with open(fpath, 'r', encoding='utf-8') as fp:
+                            st.download_button("⬇", fp.read(), file_name=f, mime="text/html", key=f"dl_html_{f}")
         else:
             st.caption("No historical reports found yet. Generate your first pulse report to get started.")
+    else:
+        st.caption("No historical reports found yet. Generate your first pulse report to get started.")
