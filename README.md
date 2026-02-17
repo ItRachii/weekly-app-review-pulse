@@ -35,6 +35,7 @@ An automated sentiment analysis and executive reporting pipeline for app store r
 | **Incremental Scraping** | Tracks scrape history in SQLite — only fetches data for date ranges not yet covered. |
 | **Idempotency** | Prevents duplicate pipeline runs for the same calendar week (overridable with `--force`). |
 | **Three Interfaces** | Accessible via CLI, REST API (FastAPI), or Streamlit Dashboard. |
+| **Groww Brand Theme** | Fully branded UI with Groww's official color palette and logo across dashboard and email reports. |
 | **Structured Logging** | Rotating file logs + console output with configurable log levels. |
 
 ---
@@ -106,17 +107,24 @@ Orchestrated by `PulseOrchestrator`, which coordinates the entire pipeline end-t
 
 ## 📁 Project Structure
 
-```
+```text
 weekly-app-review-pulse/
 ├── main.py                  # CLI entry point
 ├── main_api.py              # FastAPI server entry point (with APScheduler)
-├── streamlit_app.py         # Streamlit dashboard
+├── streamlit_app.py         # Streamlit dashboard (connects to API via HTTP)
 ├── requirements.txt         # Python dependencies
 ├── .env                     # Environment variables (not committed)
 ├── architecture.md          # Detailed architecture documentation
 │
+├── .streamlit/
+│   └── config.toml          # Streamlit theme (Groww brand colors)
+│
+├── assets/
+│   └── groww_logo.png       # Groww brand logo (favicon + header)
+│
 ├── api/
-│   └── routes.py            # FastAPI route definitions
+│   ├── __init__.py
+│   └── routes.py            # FastAPI route definitions (7 endpoints)
 │
 ├── src/
 │   ├── orchestrator.py      # Pipeline orchestrator (coordinates all stages)
@@ -125,11 +133,12 @@ weekly-app-review-pulse/
 │   ├── data_manager.py      # SQLite persistence & incremental scrape tracking
 │   ├── theme_engine.py      # LLM-powered semantic theme clustering
 │   ├── report_generator.py  # Executive pulse note generation (≤250 words)
-│   ├── email_generator.py   # HTML email template rendering
+│   ├── email_generator.py   # HTML email template (Groww branded)
 │   ├── email_service.py     # SMTP email delivery
 │   └── pii_cleaner.py       # Regex-based PII masking
 │
 ├── utils/
+│   ├── __init__.py
 │   └── logger.py            # Structured logging setup (console + rotating file)
 │
 ├── tests/                   # Unit and integration tests
@@ -269,17 +278,25 @@ The API server also includes an **APScheduler cron job** that automatically runs
 
 Best for interactive use, date range selection, and email sending.
 
+> **Important:** The dashboard communicates with the API server via HTTP. You must start the API server first.
+
 ```bash
+# Terminal 1 — Start the API server
+python main_api.py
+
+# Terminal 2 — Start the dashboard
 streamlit run streamlit_app.py
 # Dashboard opens at http://localhost:8501
 ```
 
 **Dashboard features:**
 
+- Groww brand theming with official logo and color palette
 - Date range picker for custom analysis windows
 - One-click pipeline execution
 - Inline HTML email preview
 - Direct email sending to any recipient
+- Report history with dates and download buttons
 - Data purge with confirmation safeguard
 
 ---
@@ -304,27 +321,49 @@ GET /api/v1/health
 
 ### Trigger Pipeline
 
-```
-POST /api/v1/trigger?force=false
+```http
+POST /api/v1/trigger
+Content-Type: application/json
 ```
 
-Runs the full scrape → clean → cluster → report pipeline in the background.
+Runs the full scrape → clean → cluster → report pipeline **synchronously** and returns results.
 
-| Parameter | Type | Default | Description |
+**Request body:**
+
+```json
+{
+  "start_date": "2026-02-09",
+  "end_date": "2026-02-16",
+  "force": false
+}
+```
+
+| Field | Type | Required | Description |
 |:---|:---|:---|:---|
-| `force` | bool | `false` | Bypass weekly idempotency check |
+| `start_date` | string | ❌ | ISO date (defaults to system calculation) |
+| `end_date` | string | ❌ | ISO date (defaults to today) |
+| `force` | bool | ❌ | Bypass weekly idempotency check (default: `false`) |
 
 **Response:**
 
 ```json
-{ "message": "Pipeline triggered successfully in the background.", "force": false }
+{
+  "status": "success",
+  "reviews_count": 142,
+  "themes_count": 5,
+  "run_id": "custom_20260216_234027",
+  "artifacts": {
+    "email_html": "data/processed/pulse_email_custom_20260216_234027.html",
+    "pulse_note": "data/processed/pulse_note_custom_20260216_234027.md"
+  }
+}
 ```
 
 ---
 
 ### Upload Reviews
 
-```
+```http
 POST /api/v1/upload
 Content-Type: multipart/form-data
 ```
@@ -339,23 +378,49 @@ Upload a CSV or JSON file of reviews for manual processing.
 
 ### List Reports
 
-```
+```http
 GET /api/v1/reports
 ```
 
-Returns a list of all generated `.md` and `.html` reports from `data/processed/`.
+Returns all generated reports with metadata (filename, type, date, size).
 
 **Response:**
 
 ```json
-{ "reports": ["pulse_note_2025-W07.md", "pulse_email_2025-W07.html"] }
+{
+  "reports": [
+    {
+      "filename": "pulse_email_custom_20260216_234027.html",
+      "type": "html",
+      "modified_at": "2026-02-16T23:40:48.567924",
+      "size_bytes": 3075
+    }
+  ],
+  "count": 1
+}
 ```
+
+---
+
+### Get Report Content
+
+```http
+GET /api/v1/reports/{filename}
+```
+
+Returns the content of a specific report file. Used by the dashboard for previewing and downloading reports without direct filesystem access.
+
+| Parameter | Type | Description |
+|:---|:---|:---|
+| `filename` | path | Report filename (e.g., `pulse_email_custom_20260216_234027.html`) |
+
+**Response:** Raw file content with appropriate `Content-Type` (`text/html` or `text/markdown`).
 
 ---
 
 ### Purge All Data
 
-```
+```http
 DELETE /api/v1/purge
 ```
 
@@ -382,7 +447,7 @@ curl -X DELETE http://localhost:8000/api/v1/purge \
 
 ### Send Email Report
 
-```
+```http
 POST /api/v1/send-email
 Content-Type: application/json
 ```
@@ -395,7 +460,7 @@ Sends a previously generated HTML report via SMTP.
 {
   "to_email": "manager@company.com",
   "subject": "[GROWW] Weekly Pulse — Feb 16, 2026",
-  "report_file": "pulse_email_2025-W07.html"
+  "report_file": "pulse_email_custom_20260216_234027.html"
 }
 ```
 
@@ -408,7 +473,7 @@ Sends a previously generated HTML report via SMTP.
 **Response:**
 
 ```json
-{ "status": "sent", "to": "manager@company.com", "report": "pulse_email_2025-W07.html" }
+{ "status": "sent", "to": "manager@company.com", "report": "pulse_email_custom_20260216_234027.html" }
 ```
 
 ---
@@ -495,6 +560,8 @@ python run_minimal_tests.py
 7. **SMTP requires an App Password for Gmail.** Regular Google account passwords won't work. Generate one at [Google App Passwords](https://myaccount.google.com/apppasswords).
 
 8. **Token budget.** The clustering prompt sends up to 100 reviews to the LLM. For apps with very high review volume, this is a representative sample, not the full set.
+
+9. **Dashboard requires the API server.** The Streamlit dashboard communicates with the FastAPI backend via HTTP (`http://localhost:8000/api/v1`). Always start the API server before the dashboard. The `API_BASE_URL` is configurable at the top of `streamlit_app.py` for production deployments.
 
 ### Customizing for Your App
 
