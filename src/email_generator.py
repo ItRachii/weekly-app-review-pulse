@@ -62,6 +62,33 @@ class EmailGenerator:
         <div class="footer">
           This is an automated weekly pulse summary. For raw data, see theme_analysis.json.<br>
           &copy; {year} GROWW Product Operations
+          <br><br>
+          <div style="font-weight: bold; color: #5367F5; margin-bottom: 8px;">
+            Follow us yet?<br>
+            Our social is a treasure box of finance content
+          </div>
+          <div style="margin-top: 10px;">
+            <!-- YouTube -->
+            <a href="https://www.youtube.com/channel/UCw5TLrz3qADabwezTEcOmgQ" style="text-decoration: none; margin: 0 8px;">
+              <img src="https://img.icons8.com/color/48/000000/youtube-play.png" alt="YouTube" width="24" height="24" style="vertical-align: middle;">
+            </a>
+            <!-- Instagram -->
+            <a href="https://www.instagram.com/groww_official" style="text-decoration: none; margin: 0 8px;">
+              <img src="https://img.icons8.com/color/48/000000/instagram-new.png" alt="Instagram" width="24" height="24" style="vertical-align: middle;">
+            </a>
+            <!-- X (Twitter) -->
+            <a href="https://x.com/_groww" style="text-decoration: none; margin: 0 8px;">
+              <img src="https://img.icons8.com/color/48/000000/twitter--v1.png" alt="X" width="24" height="24" style="vertical-align: middle;">
+            </a>
+            <!-- Facebook -->
+            <a href="https://www.facebook.com/growwapp/" style="text-decoration: none; margin: 0 8px;">
+              <img src="https://img.icons8.com/color/48/000000/facebook-new.png" alt="Facebook" width="24" height="24" style="vertical-align: middle;">
+            </a>
+            <!-- LinkedIn -->
+            <a href="https://www.linkedin.com/company/groww.in/" style="text-decoration: none; margin: 0 8px;">
+              <img src="https://img.icons8.com/color/48/000000/linkedin.png" alt="LinkedIn" width="24" height="24" style="vertical-align: middle;">
+            </a>
+          </div>
         </div>
       </div>
     </body>
