@@ -13,57 +13,41 @@ class EmailGenerator:
     <!DOCTYPE html>
     <html>
     <head>
-    <!--
-      Groww Brand Colors:
-      Groww Blue:            #5367F5
-      Groww Green (Logo):    #08F6B6
-      Groww Green (Primary): #00D09C
-      Groww Accent Blue A:   #B1D0FB
-      Groww Accent Blue B:   #E5F4FD
-    -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-      body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0; background: #f4f4f4; }}
-      .wrapper {{ background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(83,103,245,0.08); }}
-      .header {{ background: linear-gradient(135deg, #5367F5, #00D09C); color: #ffffff; padding: 30px 25px; text-align: center; }}
-      .header h2 {{ margin: 0 0 4px 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px; }}
-      .header p {{ margin: 0; font-size: 14px; opacity: 0.9; }}
-      .content {{ padding: 30px; }}
-      .section-title {{ color: #5367F5; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #00D09C; padding-bottom: 8px; margin: 28px 0 16px 0; }}
-      .theme-item {{ margin: 12px 0; padding: 16px; background: #E5F4FD; border-left: 4px solid #5367F5; border-radius: 6px; }}
-      .theme-label {{ font-weight: 700; color: #5367F5; font-size: 15px; }}
-      .theme-count {{ color: #00D09C; font-weight: 600; font-size: 13px; }}
-      .theme-summary {{ color: #333; font-size: 14px; margin-top: 6px; }}
-      .quote {{ font-style: italic; color: #5367F5; background: #E5F4FD; padding: 12px 16px; border-left: 3px solid #08F6B6; border-radius: 4px; margin: 10px 0; display: block; font-size: 14px; }}
-      .action-list {{ padding-left: 20px; margin: 0; }}
-      .action-item {{ margin: 10px 0; color: #333; font-size: 14px; }}
-      .action-item::marker {{ color: #00D09C; }}
-      .footer {{ padding: 20px 30px; font-size: 11px; color: #B1D0FB; text-align: center; border-top: 1px solid #E5F4FD; }}
-      .footer a {{ color: #5367F5; text-decoration: none; }}
+        body {{ margin: 0; padding: 0; background-color: #f4f4f4; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }}
+        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ text-align: left; padding: 20px 0; }}
+        .header h1 {{ margin: 0; font-size: 32px; font-weight: 800; color: #1a1a1a; letter-spacing: -0.5px; }}
+        .header h1 span {{ color: #5367F5; }} /* Groww Blue accent? or keep it black */
+        .card {{ background-color: #ffffff; border-radius: 16px; overflow: hidden; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
+        .card-image {{ width: 100%; height: 200px; background-color: #e0e0e0; display: block; object-fit: cover; }}
+        .card-content {{ padding: 24px; }}
+        .card-title {{ margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #1a1a1a; line-height: 1.3; }}
+        .card-text {{ margin: 0 0 20px 0; font-size: 16px; line-height: 1.6; color: #555555; }}
+        .btn {{ display: inline-block; padding: 12px 24px; background-color: #5367F5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background-color 0.2s; }}
+        .btn:hover {{ background-color: #4255d4; }}
+        .footer {{ text-align: center; padding: 20px; color: #999999; font-size: 12px; }}
+        .footer a {{ color: #5367F5; text-decoration: none; }}
+        
+        /* Utility for missing images - a nice gradient placeholder */
+        .img-placeholder {{ width: 100%; height: 8px; background: linear-gradient(90deg, #5367F5, #00D09C); }}
     </style>
     </head>
     <body>
-      <div class="wrapper">
-        <div class="header">
-          <h2>GROWW Pulse Report</h2>
-          <p>Week of {date}</p>
-        </div>
-        <div class="content">
-          <div class="section-title">Top Sentiment Themes</div>
-          {theme_html}
+        <div class="container">
+            <div class="header">
+                <h1>Weekly Updates</h1>
+            </div>
+            
+            {content_html}
 
-          <div class="section-title">Critical User Voices</div>
-          {quote_html}
-
-          <div class="section-title">Recommended Actions</div>
-          <ul class="action-list">
-            {action_html}
-          </ul>
+            <div class="footer">
+                &copy; {year} Groww Product Operations<br>
+                Automated Pulse Report • {date}
+            </div>
         </div>
-        <div class="footer">
-          This is an automated weekly pulse summary. For raw data, see theme_analysis.json.<br>
-          &copy; {year} GROWW Product Operations
-        </div>
-      </div>
     </body>
     </html>
     """
@@ -73,36 +57,31 @@ class EmailGenerator:
         date_str = datetime.now().strftime("%B %d, %Y")
         year_str = datetime.now().strftime("%Y")
         
-        # Build Theme HTML
-        theme_items = []
-        for theme in themes[:3]:
-            theme_items.append(f"""
-            <div class="theme-item">
-              <span class="theme-label">{theme['label']}</span> <span class="theme-count">({theme['review_count']} reviews)</span>
-              <div class="theme-summary">{theme['summary']}</div>
+        cards_html = []
+        
+        # We'll take the top 5 themes for the email
+        for theme in themes[:5]:
+            title = theme.get('label', 'Untitled Theme')
+            summary = theme.get('summary', 'No summary available.')
+            review_count = theme.get('review_count', 0)
+            
+            # Since we don't have real images, we use a colored bar placeholder
+            # If we had images, we'd use <img src="..." class="card-image">
+            
+            card = f"""
+            <div class="card">
+                <div class="img-placeholder"></div>
+                <div class="card-content">
+                    <h2 class="card-title">{title}</h2>
+                    <p class="card-text">{summary}</p>
+                    <a href="#" class="btn">Read more</a>
+                </div>
             </div>
-            """)
-        theme_html = "\n".join(theme_items)
-
-        # Build Quote HTML
-        quotes = []
-        for theme in themes[:3]:
-            # Take the first quote from each top theme
-            if theme.get('high_signal_quotes'):
-                quotes.append(f'<span class="quote">"{theme["high_signal_quotes"][0]}"</span>')
-        quote_html = "\n".join(quotes)
-
-        # Build Action HTML
-        actions = []
-        for theme in themes[:3]:
-            if theme.get('action_ideas'):
-                actions.append(f'<li class="action-item">{theme["action_ideas"][0]}</li>')
-        action_html = "\n".join(actions)
-
+            """
+            cards_html.append(card)
+            
         return cls.HTML_TEMPLATE.format(
+            content_html="\n".join(cards_html),
             date=date_str,
-            year=year_str,
-            theme_html=theme_html,
-            quote_html=quote_html,
-            action_html=action_html
+            year=year_str
         )
