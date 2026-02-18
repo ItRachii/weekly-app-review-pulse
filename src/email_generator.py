@@ -28,8 +28,13 @@ class EmailGenerator:
         .card-text {{ margin: 0 0 20px 0; font-size: 16px; line-height: 1.6; color: #555555; }}
         .btn {{ display: inline-block; padding: 12px 24px; background-color: #5367F5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background-color 0.2s; }}
         .btn:hover {{ background-color: #4255d4; }}
-        .footer {{ text-align: center; padding: 20px; color: #999999; font-size: 12px; }}
-        .footer a {{ color: #5367F5; text-decoration: none; }}
+        .footer {{ text-align: center; padding: 40px 20px; color: #999999; font-size: 12px; border-top: 1px solid #eaeaea; margin-top: 40px; }}
+        .footer h3 {{ color: #1a1a1a; font-size: 18px; font-weight: 700; margin: 0 0 10px 0; }}
+        .footer p {{ margin: 0 0 24px 0; font-size: 14px; color: #666666; }}
+        .social-links {{ margin-bottom: 30px; }}
+        .social-link {{ display: inline-block; margin: 0 10px; color: #5367F5; text-decoration: none; font-weight: 600; font-size: 14px; }}
+        .social-link:hover {{ text-decoration: underline; }}
+        .company-name {{ font-weight: 600; color: #1a1a1a; margin-top: 20px; display: block; }}
         
         /* Utility for missing images - a nice gradient placeholder */
         .img-placeholder {{ width: 100%; height: 8px; background: linear-gradient(90deg, #5367F5, #00D09C); }}
@@ -44,8 +49,17 @@ class EmailGenerator:
             {content_html}
 
             <div class="footer">
-                &copy; {year} Groww Product Operations<br>
-                Automated Pulse Report • {date}
+                <h3>Follow us yet?</h3>
+                <p>Our social is a treasure box of finance content</p>
+                
+                <div class="social-links">
+                    <a href="https://www.youtube.com/channel/UCw5TLrz3qADabwezTEcOmgQ" class="social-link">YouTube</a>
+                    <a href="https://www.instagram.com/groww_official" class="social-link">Instagram</a>
+                    <a href="https://x.com/_groww" class="social-link">X</a>
+                    <a href="https://www.facebook.com/growwapp/" class="social-link">Facebook</a>
+                </div>
+
+                <span class="company-name">Groww Invest Tech Pvt. Ltd.</span>
             </div>
         </div>
     </body>
