@@ -157,12 +157,16 @@ with st.sidebar:
 
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("Confirm", type="primary", disabled=st.session_state.get("purge_val", "").lower() != "delete", use_container_width=True):
-                    with st.spinner("Purging all data..."):
-                        if orchestrator.purge_all_data():
-                            st.session_state.clear()
-                            st.success("All data has been purged successfully!")
-                            st.rerun()
+                if st.button("Confirm", type="primary", use_container_width=True):
+                    if st.session_state.get("purge_val", "").strip().lower() == "delete":
+                        with st.spinner("Purging all data..."):
+                            if orchestrator.purge_all_data():
+                                st.session_state.clear()
+                                st.success("All data has been purged successfully!")
+                                st.rerun()
+                    else:
+                        st.warning("Please type 'delete' to confirm.")
+
             with c2:
                 if st.button("Cancel", use_container_width=True):
                     st.session_state.show_maintenance_drawer = False
@@ -180,12 +184,16 @@ with st.sidebar:
                     const targetBtn = Array.from(buttons).find(b => b.innerText.includes("Confirm"));
 
                     if (targetInput && targetBtn) {{
+                        // 1. Set initial state based on current value
+                        targetBtn.disabled = targetInput.value.toLowerCase() !== 'delete';
+                        
+                        // 2. Add listener for future changes
                         targetInput.addEventListener('input', (e) => {{
                             targetBtn.disabled = e.target.value.toLowerCase() !== 'delete';
                         }});
                     }}
                 }};
-                setInterval(check, 300);
+                setInterval(check, 100);
                 </script>
                 """,
                 height=0
