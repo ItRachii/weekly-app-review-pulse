@@ -26,8 +26,6 @@ class EmailGenerator:
         .card-content {{ padding: 24px; }}
         .card-title {{ margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #1a1a1a; line-height: 1.3; }}
         .card-text {{ margin: 0 0 20px 0; font-size: 16px; line-height: 1.6; color: #555555; }}
-        .btn {{ display: inline-block; padding: 12px 24px; background-color: #5367F5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; transition: background-color 0.2s; }}
-        .btn:hover {{ background-color: #4255d4; }}
         .footer {{ text-align: center; padding: 40px 20px; color: #999999; font-size: 12px; border-top: 1px solid #eaeaea; margin-top: 40px; }}
         .footer h3 {{ color: #1a1a1a; font-size: 18px; font-weight: 700; margin: 0 0 10px 0; }}
         .footer p {{ margin: 0 0 24px 0; font-size: 14px; color: #666666; }}
@@ -97,7 +95,6 @@ class EmailGenerator:
                 <div class="card-content">
                     <h2 class="card-title">{title}</h2>
                     <p class="card-text">{summary}</p>
-                    <a href="#" class="btn">Read more</a>
                 </div>
             </div>
             """
