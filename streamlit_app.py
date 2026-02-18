@@ -204,7 +204,7 @@ if 'latest_result' in st.session_state:
     res = st.session_state['latest_result']
 
     
-    if st.button("← Back to Configuration"):
+    if st.button("←"):
         del st.session_state['latest_result']
         st.rerun()
 
