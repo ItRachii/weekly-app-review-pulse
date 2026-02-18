@@ -157,7 +157,7 @@ with st.sidebar:
 
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("Confirm Full Purge", type="primary", disabled=st.session_state.get("purge_val", "").lower() != "delete", use_container_width=True):
+                if st.button("Confirm", type="primary", disabled=st.session_state.get("purge_val", "").lower() != "delete", use_container_width=True):
                     with st.spinner("Purging all data..."):
                         if orchestrator.purge_all_data():
                             st.session_state.clear()
@@ -177,7 +177,7 @@ with st.sidebar:
                     const inputs = doc.querySelectorAll('input[aria-label="Confirm Delete"]');
                     const buttons = doc.querySelectorAll('button');
                     const targetInput = Array.from(inputs).find(i => i.placeholder === "delete");
-                    const targetBtn = Array.from(buttons).find(b => b.innerText.includes("Confirm Full Purge"));
+                    const targetBtn = Array.from(buttons).find(b => b.innerText.includes("Confirm"));
 
                     if (targetInput && targetBtn) {{
                         targetInput.addEventListener('input', (e) => {{
