@@ -203,16 +203,15 @@ with st.sidebar:
 if 'latest_result' in st.session_state:
     res = st.session_state['latest_result']
 
+    
+    if st.button("← Back to Configuration"):
+        del st.session_state['latest_result']
+        st.rerun()
+
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        c_back, c_title = st.columns([0.2, 0.8], vertical_alignment="center")
-        with c_back:
-            if st.button("← Back", use_container_width=True):
-                del st.session_state['latest_result']
-                st.rerun()
-        with c_title:
-            st.header("📧 Draft Email Report")
+        st.header("📧 Draft Email Report")
             
         email_path = res.get('artifacts', {}).get('email_html', '')
         if email_path and os.path.exists(email_path):
