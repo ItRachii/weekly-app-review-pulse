@@ -260,9 +260,22 @@ else:
             reverse=True
         )
 
-        if html_files:
-            # Markdown reports hidden to only show Email (HTML) reports
+        if md_files or html_files:
+            if md_files:
+                st.markdown("**📝 Pulse Notes (Markdown)**")
+                for f in md_files:
+                    fpath = os.path.join(processed_dir, f)
+                    mod_time = datetime.fromtimestamp(os.path.getmtime(fpath))
+                    date_label = mod_time.strftime("%b %d, %Y  •  %I:%M %p")
 
+                    col_name, col_date, col_dl = st.columns([3, 3, 1])
+                    with col_name:
+                        st.markdown(f"📄 `{f}`")
+                    with col_date:
+                        st.caption(f"🕒 {date_label}")
+                    with col_dl:
+                        with open(fpath, 'r', encoding='utf-8') as fp:
+                            st.download_button("⬇", fp.read(), file_name=f, mime="text/markdown", key=f"dl_md_{f}")
 
             if html_files:
                 st.markdown("**📧 Email Reports (HTML)**")
