@@ -32,7 +32,8 @@ class EmailGenerator:
         .footer h3 {{ color: #1a1a1a; font-size: 18px; font-weight: 700; margin: 0 0 10px 0; }}
         .footer p {{ margin: 0 0 24px 0; font-size: 14px; color: #666666; }}
         .social-links {{ margin-bottom: 30px; }}
-        .social-link {{ display: inline-block; margin: 0 10px; color: #5367F5; text-decoration: none; font-weight: 600; font-size: 14px; }}
+        .social-link {{ display: inline-block; margin: 0 10px; color: #5367F5; text-decoration: none; font-weight: 600; font-size: 14px; align-items: center; }}
+        .social-link img {{ vertical-align: middle; margin-right: 5px; width: 24px; height: 24px; }}
         .social-link:hover {{ text-decoration: underline; }}
         .company-name {{ font-weight: 600; color: #1a1a1a; margin-top: 20px; display: block; }}
         
@@ -53,10 +54,18 @@ class EmailGenerator:
                 <p>Our social is a treasure box of finance content</p>
                 
                 <div class="social-links">
-                    <a href="https://www.youtube.com/channel/UCw5TLrz3qADabwezTEcOmgQ" class="social-link">YouTube</a>
-                    <a href="https://www.instagram.com/groww_official" class="social-link">Instagram</a>
-                    <a href="https://x.com/_groww" class="social-link">X</a>
-                    <a href="https://www.facebook.com/growwapp/" class="social-link">Facebook</a>
+                    <a href="https://www.youtube.com/channel/UCw5TLrz3qADabwezTEcOmgQ" class="social-link">
+                        <img src="https://img.icons8.com/color/48/youtube-play.png" alt="YouTube">YouTube
+                    </a>
+                    <a href="https://www.instagram.com/groww_official" class="social-link">
+                        <img src="https://img.icons8.com/fluent/48/instagram-new.png" alt="Instagram">Instagram
+                    </a>
+                    <a href="https://x.com/_groww" class="social-link">
+                        <img src="https://img.icons8.com/ios-filled/50/000000/twitterx--v1.png" alt="X">X
+                    </a>
+                    <a href="https://www.facebook.com/growwapp/" class="social-link">
+                        <img src="https://img.icons8.com/color/48/facebook-new.png" alt="Facebook">Facebook
+                    </a>
                 </div>
 
                 <span class="company-name">Groww Invest Tech Pvt. Ltd.</span>
