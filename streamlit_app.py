@@ -276,22 +276,19 @@ else:
 
         if html_files:
             # Markdown reports hidden to only show Email (HTML) reports
+            for f in html_files:
+                fpath = os.path.join(processed_dir, f)
+                mod_time = datetime.fromtimestamp(os.path.getmtime(fpath))
+                date_label = mod_time.strftime("%b %d, %Y  •  %I:%M %p")
 
-            if html_files:
-                st.markdown("**📧 Email Reports (HTML)**")
-                for f in html_files:
-                    fpath = os.path.join(processed_dir, f)
-                    mod_time = datetime.fromtimestamp(os.path.getmtime(fpath))
-                    date_label = mod_time.strftime("%b %d, %Y  •  %I:%M %p")
-
-                    col_name, col_date, col_dl = st.columns([3, 3, 1])
-                    with col_name:
-                        st.markdown(f"📧 `{f}`")
-                    with col_date:
-                        st.caption(f"🕒 {date_label}")
-                    with col_dl:
-                        with open(fpath, 'r', encoding='utf-8') as fp:
-                            st.download_button("⬇", fp.read(), file_name=f, mime="text/html", key=f"dl_html_{f}")
+                col_name, col_date, col_dl = st.columns([3, 3, 1])
+                with col_name:
+                    st.markdown(f"📧 `{f}`")
+                with col_date:
+                    st.caption(f"🕒 {date_label}")
+                with col_dl:
+                    with open(fpath, 'r', encoding='utf-8') as fp:
+                        st.download_button("⬇", fp.read(), file_name=f, mime="text/html", key=f"dl_html_{f}")
         else:
             st.caption("No historical reports found yet. Generate your first pulse report to get started.")
     else:
