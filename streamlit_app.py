@@ -308,14 +308,14 @@ else:
             # Markdown reports hidden to only show Email (HTML) reports
             
             # Use columns for a table-like header
-            h1, h2, h3, h4, h5 = st.columns([1, 4, 3, 3, 2])
+            h1, h2, h3, h4, h5 = st.columns([1, 4, 3, 3, 2], vertical_alignment="center")
             h1.markdown("**S.No.**")
             h2.markdown("**Run ID**")
             h3.markdown("**Date Range**")
             h4.markdown("**Generated On**")
             h5.markdown("**Download**")
             
-            st.divider()
+            st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
 
             for idx, f in enumerate(html_files):
                 fpath = os.path.join(processed_dir, f)
@@ -342,20 +342,20 @@ else:
                 except Exception:
                     pass
 
-                c1, c2, c3, c4, c5 = st.columns([1, 4, 3, 3, 2])
+                c1, c2, c3, c4, c5 = st.columns([1, 4, 3, 3, 2], vertical_alignment="center")
                 with c1:
-                    st.text(f"{idx + 1}")
+                    st.markdown(f"**{idx + 1}**")
                 with c2:
                     st.markdown(f"[{run_id}](/?run_id={run_id})")
                 with c3:
-                    st.text(date_range_str)
+                    st.caption(date_range_str)
                 with c4:
-                    st.text(date_label)
+                    st.caption(date_label)
                 with c5:
                     with open(fpath, 'r', encoding='utf-8') as fp:
                         st.download_button("⬇", fp.read(), file_name=f, mime="text/html", key=f"dl_html_{f}")
                 
-                st.divider()
+                st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
         else:
             st.caption("No historical reports found yet. Generate your first pulse report to get started.")
     else:
