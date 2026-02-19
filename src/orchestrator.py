@@ -108,11 +108,11 @@ class PulseOrchestrator:
             ]
             
             for platform in platforms:
-                missing_ranges = self.db.get_missing_ranges(current_start, current_end, platform["name"])
+                missing_ranges = self.data_manager.get_missing_ranges(current_start, current_end, platform["name"])
                 
                 # Check if this is the first time for this platform
                 if len(missing_ranges) == 1 and missing_ranges[0] == (current_start, current_end):
-                    has_history = self.db.has_platform_history(platform["name"])
+                    has_history = self.data_manager.has_platform_history(platform["name"])
                     if not has_history:
                         logger.info(f"Initial run detected for {platform['name']}. Performing full sync for the requested range.")
                 
@@ -131,17 +131,17 @@ class PulseOrchestrator:
                         new_reviews = scraper.scrape_play_store(package_name=platform["id"], count=500)
                     
                     if new_reviews:
-                        saved = self.db.save_reviews(new_reviews)
+                        saved = self.data_manager.save_reviews(new_reviews)
                         logger.info(f"Saved {saved}/{len(new_reviews)} new reviews for {platform['name']}")
                     else:
                         logger.info(f"No new reviews found for {platform['name']} in this sub-range.")
                     
                     # Mark as scraped regardless of finding reviews, so we don't infinitely retry empty days.
                     # But we trust DataManager.save_reviews wouldn't crash.
-                    self.db.mark_scraped(platform["name"], m_start, m_end)
+                    self.data_manager.mark_scraped(platform["name"], m_start, m_end)
 
             # 2. Fetch all reviews (Cached + Just Scraped) for the requested range
-            all_reviews = self.db.get_cached_reviews(current_start, current_end)
+            all_reviews = self.data_manager.get_cached_reviews(current_start, current_end)
             
             if not all_reviews:
                 raise PulsePipelineError("No reviews found in the requested date range.", "Scraping")
@@ -240,7 +240,7 @@ class PulseOrchestrator:
                         logger.error(f"Failed to delete {file_path}: {e}")
 
         # 2. Reset Database
-        self.db.reset_database()
+        self.data_manager.reset_database()
 
         # 3. Truncate Logs
         log_path = 'logs/pulse_pipeline.log'
