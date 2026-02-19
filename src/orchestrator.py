@@ -166,7 +166,18 @@ class PulseOrchestrator:
             report_gen = PulseReportGenerator()
             pulse_note = report_gen.generate_note(themes)
             
-            email_html = EmailGenerator.generate_html(themes)
+            # Calculate stats for Email Snapshot
+            total_reviews = len(all_reviews)
+            avg_rating = sum(r['rating'] for r in all_reviews) / total_reviews if total_reviews > 0 else 0
+            critical_issues_count = sum(1 for r in all_reviews if r['rating'] <= 2)
+            
+            stats = {
+                "total_reviews": total_reviews,
+                "avg_rating": avg_rating,
+                "critical_issues_count": critical_issues_count
+            }
+
+            email_html = EmailGenerator.generate_html(themes, stats)
 
             note_path = f"data/processed/pulse_note_{run_id}.md"
             email_path = f"data/processed/pulse_email_{run_id}.html"

@@ -14,6 +14,8 @@ class Theme(BaseModel):
     label: str = Field(..., description="Concise 2-4 word theme label")
     review_count: int = Field(..., description="Number of reviews in this theme")
     summary: str = Field(..., description="Brief summary of the theme's core message")
+    sentiment: str = Field(..., description="Overall sentiment: 'Positive', 'Neutral', or 'Negative'")
+    business_impact: str = Field(..., description="Why this matters to the business (max 15 words)")
     high_signal_quotes: List[str] = Field(..., description="3 representative, high-signal, non-PII quotes (max 25 words each)")
     action_ideas: List[str] = Field(..., description="3 specific, realistic, and implementable action ideas for the product team")
 
@@ -53,9 +55,11 @@ class ThemeClusteringEngine:
     ### Rules:
     1. Semantic Grouping: Group similar feedback (e.g., UI issues, payment failures).
     2. Labels: Use concise labels (2-4 words, e.g., "Payment Gateway Failures").
-    3. Exclusivity: Ensure themes do not overlap.
-    4. Coverage: Every major feedback point should fall into one of these 5 categories.
-    5. Prioritization: Focus on the most frequent and impactful themes.
+    3. Sentiment: Classify the overall sentiment of the theme as "Positive", "Neutral", or "Negative".
+    4. Business Impact: Explain in 1 sentence (max 15 words) why this theme matters to the business (e.g., "High churn risk", "Adoption blocker", "Growth opportunity").
+    5. Exclusivity: Ensure themes do not overlap.
+    6. Coverage: Every major feedback point should fall into one of these 5 categories.
+    7. Prioritization: Focus on the most frequent and impactful themes.
 
     ### Quote Selection Criteria:
     Select EXACTLY 3 quotes per theme that are clear, representative, non-PII, and ≤ 25 words.
@@ -82,6 +86,8 @@ class ThemeClusteringEngine:
           "label": "Theme Label",
           "review_count": 12,
           "summary": "Brief explanation.",
+          "sentiment": "Negative",
+          "business_impact": "High churn risk due to payment failures.",
           "high_signal_quotes": ["Quote 1", "Quote 2", "Quote 3"],
           "action_ideas": ["Action 1", "Action 2", "Action 3"]
         }}
@@ -138,6 +144,8 @@ class ThemeClusteringEngine:
                 label="General Feedback",
                 review_count=len(reviews),
                 summary="Automated analysis failed. General review aggregation.",
+                sentiment="Neutral",
+                business_impact="System error - analysis incomplete.",
                 high_signal_quotes=["Review analysis failed.", "No quotes available.", "Please check logs."],
                 action_ideas=["Fix the extraction pipeline.", "Check OpenAI API status.", "Verify input review format."]
             )
