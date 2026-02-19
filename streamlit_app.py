@@ -437,7 +437,7 @@ else:
                 with c1:
                     st.markdown(f"**{row_idx}**")
                 with c2:
-                    st.markdown(f"[{run_id}](/?run_id={run_id})")
+                    st.markdown(f'<a href="/?run_id={run_id}" target="_self" style="color:#5367F5; text-decoration:none;">{run_id}</a>', unsafe_allow_html=True)
                 with c3:
                     st.caption(status_badge)
                 with c4:
