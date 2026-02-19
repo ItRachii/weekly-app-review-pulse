@@ -292,23 +292,24 @@ else:
                         if len(parts) >= 3:
                             s = datetime.strptime(parts[1], "%Y%m%d")
                             e = datetime.strptime(parts[2], "%Y%m%d")
-                            date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d, %Y')}"
+                            date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
                     elif "-W" in run_id:
                         # Format: YYYY-Www
                         year, week = run_id.split("-W")
                         start = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
                         end = start + timedelta(days=6)
-                        date_range_str = f"{start.strftime('%b %d')} - {end.strftime('%b %d, %Y')}"
+                        date_range_str = f"{start.strftime('%b %d')} - {end.strftime('%b %d %Y')}"
                 except Exception:
                     pass
 
-                col_name, col_date, col_dl = st.columns([3, 3, 1])
+                col_name, col_range, col_date, col_dl = st.columns([4, 3, 3, 1])
                 with col_name:
                     st.markdown(f"📧 `{f}`")
+                with col_range:
                     if date_range_str:
-                        st.caption(f"📅 Range: {date_range_str}")
+                        st.caption(f"📅 {date_range_str}")
                 with col_date:
-                    st.caption(f"🕒 Generated: {date_label}")
+                    st.caption(f"🕒 {date_label}")
                 with col_dl:
                     with open(fpath, 'r', encoding='utf-8') as fp:
                         st.download_button("⬇", fp.read(), file_name=f, mime="text/html", key=f"dl_html_{f}")
