@@ -437,7 +437,16 @@ else:
                 with c1:
                     st.markdown(f"**{row_idx}**")
                 with c2:
-                    st.markdown(f"[{run_id}](/?run_id={run_id})")
+                    if st.button(run_id, key=f"open_{run_id}", type="tertiary"):
+                        run_log = orchestrator.data_manager.get_run_log(run_id)
+                        st.session_state['latest_result'] = {
+                            "status": "success",
+                            "run_id": run_id,
+                            "reviews_count": run_log.get('reviews_processed', 'N/A'),
+                            "themes_count": run_log.get('themes_identified', 'N/A'),
+                            "artifacts": {"email_html": fpath}
+                        }
+                        st.rerun()
                 with c3:
                     st.caption(status_badge)
                 with c4:
