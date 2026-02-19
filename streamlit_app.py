@@ -363,39 +363,48 @@ else:
         )
 
         if 'pipeline_pending' in st.session_state or html_files:
-            # Build table rows
-            rows_html = ""
+            # Use columns for a table-like header
+            h1, h2, h3, h4, h5, h6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
+            h1.markdown("**S.No.**")
+            h2.markdown("**Run ID**")
+            h3.markdown("**Status**")
+            h4.markdown("**Date Range**")
+            h5.markdown("**Generated On**")
+            h6.markdown("**Download**")
+            st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
+
             row_idx = 1
 
-            # --- In-flight (pending) runs first ---
+            # --- Show in-flight (pending) runs first ---
             active_run_id = st.session_state.get('pipeline_run_id')
             pending = st.session_state.get('pipeline_pending', {})
             for pid, pinfo in pending.items():
+                # Determine live status
                 if pid == active_run_id and 'pipeline_future' in st.session_state:
-                    status_html = "<span style='color:#F5A623;'>⬤</span> Running"
+                    status_badge = "🟡 Running"
                 elif st.session_state.get('pipeline_status') == 'failed' and pid == active_run_id:
-                    status_html = "<span style='color:#E53935;'>⬤</span> Failed"
+                    status_badge = "🔴 Failed"
                 else:
-                    continue  # Already done — will appear in html_files
+                    # Already completed — skip (will appear in html_files below)
+                    continue
 
-                rows_html += f"""
-                <tr>
-                    <td>{row_idx}</td>
-                    <td style='color:#9e9e9e;'>{pinfo['run_id']}</td>
-                    <td>{status_html}</td>
-                    <td>{pinfo['date_range_str']}</td>
-                    <td>{pinfo['triggered_at']}</td>
-                    <td>—</td>
-                </tr>"""
+                c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
+                with c1: st.markdown(f"**{row_idx}**")
+                with c2: st.markdown(f"{pinfo['run_id']}")
+                with c3: st.caption(status_badge)
+                with c4: st.caption(pinfo['date_range_str'])
+                with c5: st.caption(pinfo['triggered_at'])
+                with c6: st.caption("—")
+                st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
                 row_idx += 1
 
-            # Collect completed rows + download buttons separately
-            download_buttons = []
+            # --- Show completed runs from filesystem ---
             for f in html_files:
                 fpath = os.path.join(processed_dir, f)
                 mod_time = datetime.fromtimestamp(os.path.getmtime(fpath))
                 date_label = mod_time.strftime("%b %d, %Y %I:%M %p")
-
+                
+                # Parse run_id and date range
                 run_id = f.replace("pulse_email_", "").replace(".html", "")
                 date_range_str = "-"
                 try:
@@ -407,95 +416,39 @@ else:
                             date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
                     elif "-W" in run_id:
                         year, week = run_id.split("-W")
-                        s2 = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
-                        e2 = s2 + timedelta(days=6)
-                        date_range_str = f"{s2.strftime('%b %d')} - {e2.strftime('%b %d %Y')}"
+                        start = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
+                        end = start + timedelta(days=6)
+                        date_range_str = f"{start.strftime('%b %d')} - {end.strftime('%b %d %Y')}"
                 except Exception:
                     pass
 
+                # Determine pipeline status for this run
                 pipeline_status_for_run = st.session_state.get('pipeline_status')
                 if active_run_id == run_id and pipeline_status_for_run == 'failed':
-                    status_html = "<span style='color:#E53935;'>⬤</span> Failed"
+                    status_badge = "🔴 Failed"
                 else:
-                    status_html = "<span style='color:#00D09C;'>⬤</span> Succeeded"
+                    status_badge = "🟢 Succeeded"
 
+                # Remove from pending once file exists
                 if run_id in st.session_state.get('pipeline_pending', {}):
                     del st.session_state['pipeline_pending'][run_id]
 
-                rows_html += f"""
-                <tr>
-                    <td>{row_idx}</td>
-                    <td><a href='/?run_id={run_id}' target='_self' style='color:#5367F5; text-decoration:none;'>{run_id}</a></td>
-                    <td>{status_html}</td>
-                    <td>{date_range_str}</td>
-                    <td>{date_label}</td>
-                    <td data-dl='{run_id}'></td>
-                </tr>"""
-                download_buttons.append((row_idx, run_id, fpath, f))
-                row_idx += 1
-
-            table_html = f"""
-            <style>
-                .pulse-table {{
-                    width: 100%;
-                    border-collapse: collapse;
-                    font-size: 14px;
-                    table-layout: fixed;
-                }}
-                .pulse-table th {{
-                    text-align: left;
-                    padding: 8px 12px;
-                    font-weight: 600;
-                    border-bottom: 1px solid #B1D0FB;
-                    color: #0B0B21;
-                }}
-                .pulse-table td {{
-                    padding: 10px 12px;
-                    border-bottom: 1px solid #e8edf5;
-                    color: #444;
-                    vertical-align: middle;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }}
-                .pulse-table th:nth-child(1), .pulse-table td:nth-child(1) {{ width: 6%; }}
-                .pulse-table th:nth-child(2), .pulse-table td:nth-child(2) {{ width: 32%; }}
-                .pulse-table th:nth-child(3), .pulse-table td:nth-child(3) {{ width: 14%; }}
-                .pulse-table th:nth-child(4), .pulse-table td:nth-child(4) {{ width: 18%; }}
-                .pulse-table th:nth-child(5), .pulse-table td:nth-child(5) {{ width: 20%; }}
-                .pulse-table th:nth-child(6), .pulse-table td:nth-child(6) {{ width: 10%; }}
-            </style>
-            <table class='pulse-table'>
-                <thead>
-                    <tr>
-                        <th>S.No.</th>
-                        <th>Run ID</th>
-                        <th>Status</th>
-                        <th>Date Range</th>
-                        <th>Generated On</th>
-                        <th>Download</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows_html}
-                </tbody>
-            </table>
-            """
-            st.markdown(table_html, unsafe_allow_html=True)
-
-            # Render download buttons below (Streamlit widgets can't go inside HTML table)
-            if download_buttons:
-                st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-                for ridx, run_id, fpath, fname in download_buttons:
+                c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
+                with c1:
+                    st.markdown(f"**{row_idx}**")
+                with c2:
+                    st.markdown(f"[{run_id}](/?run_id={run_id})")
+                with c3:
+                    st.caption(status_badge)
+                with c4:
+                    st.caption(date_range_str)
+                with c5:
+                    st.caption(date_label)
+                with c6:
                     with open(fpath, 'r', encoding='utf-8') as fp:
-                        st.download_button(
-                            f"⬇ Download {run_id}",
-                            fp.read(),
-                            file_name=fname,
-                            mime="text/html",
-                            key=f"dl_html_{fname}",
-                            use_container_width=False
-                        )
+                        st.download_button("⬇", fp.read(), file_name=f, mime="text/html", key=f"dl_html_{f}")
+                st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
+                row_idx += 1
         else:
             st.caption("No historical reports found yet. Generate your first pulse report to get started.")
     else:
