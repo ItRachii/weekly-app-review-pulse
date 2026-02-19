@@ -67,12 +67,13 @@ class PulseOrchestrator:
             with open(self.MANIFEST_FILE, 'w') as f:
                 json.dump(manifest, f, indent=2)
 
-    def run_pipeline(self, force: bool = False, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> Dict[str, Any]:
+    def run_pipeline(self, force: bool = False, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Executes the full pipeline.
         :param force: If True, bypasses idempotency check.
         :param start_date: Optional start date for scraping.
         :param end_date: Optional end date for scraping.
+        :param run_id: Optional pre-generated run_id for tracking.
         """
         # 0. Handle Date Defaults
         current_end = end_date or datetime.now()
@@ -82,14 +83,15 @@ class PulseOrchestrator:
         # and treat it as a custom run.
         is_custom_run = start_date is not None or end_date is not None
         
-        if is_custom_run:
-            # Format: custom_START_END_TIMESTAMP
-            timestamp = datetime.now().strftime('%H%M%S')
-            start_str = current_start.strftime('%Y%m%d')
-            end_str = current_end.strftime('%Y%m%d')
-            run_id = f"custom_{start_str}_{end_str}_{timestamp}"
-        else:
-            run_id = self._get_week_id()
+        if not run_id:
+            if is_custom_run:
+                # Format: custom_START_END_TIMESTAMP
+                timestamp = datetime.now().strftime('%H%M%S')
+                start_str = current_start.strftime('%Y%m%d')
+                end_str = current_end.strftime('%Y%m%d')
+                run_id = f"custom_{start_str}_{end_str}_{timestamp}"
+            else:
+                run_id = self._get_week_id()
 
         if not force and not is_custom_run and self._already_run_this_week():
             msg = f"Pipeline already run for {run_id}. Use force=True to override."

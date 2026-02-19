@@ -6,6 +6,8 @@ import streamlit.components.v1 as components
 from PIL import Image
 from src.orchestrator import PulseOrchestrator
 from src.email_service import EmailService
+import concurrent.futures
+import time
 
 # --- App Config ---
 groww_icon = Image.open("assets/groww_logo.png")
@@ -100,8 +102,38 @@ st.markdown("""
 def get_orchestrator():
     return PulseOrchestrator()
 
+@st.cache_resource
+def get_executor():
+    return concurrent.futures.ThreadPoolExecutor(max_workers=1)
+
 
 orchestrator = get_orchestrator()
+executor = get_executor()
+
+# --- Async Pipeline Status Check ---
+if 'pipeline_future' in st.session_state:
+    future = st.session_state['pipeline_future']
+    if future.done():
+        try:
+            result = future.result()
+            if result["status"] == "success":
+                st.toast(f"Pipeline Succeeded! Reviews: {result['reviews_count']}", icon="✅")
+                st.success(f"Pipeline completed! [View Report](/?run_id={result['run_id']})")
+                st.session_state['latest_result'] = result
+            else:
+                st.toast(f"Pipeline Failed: {result.get('error')}", icon="❌")
+                st.error(f"Pipeline failed: {result.get('error')}")
+        except Exception as e:
+            st.error(f"Pipeline execution error: {e}")
+        
+        # Clear future to stop checking
+        del st.session_state['pipeline_future']
+        if 'pipeline_run_id' in st.session_state:
+            del st.session_state['pipeline_run_id']
+    else:
+        # Still running
+        run_id = st.session_state.get('pipeline_run_id', 'Unknown')
+        st.info(f"Pipeline running for {run_id}... You can continue using the app.")
 
 # --- Query Param Handling (Deep Linking) ---
 # Check if a specific report is requested via URL (e.g. /?run_id=2023-W23)
@@ -163,20 +195,29 @@ with st.sidebar:
         if start_date > end_date:
             st.error("Error: Start date must be before end date.")
         else:
-            with st.spinner("Executing Pulse Pipeline..."):
-                dt_start = datetime.combine(start_date, datetime.min.time())
-                dt_end = datetime.combine(end_date, datetime.max.time())
+            # Prepare Custom Run ID for instant feedback
+            timestamp = datetime.now().strftime('%H%M%S')
+            start_str = start_date.strftime('%Y%m%d')
+            end_str = end_date.strftime('%Y%m%d')
+            custom_run_id = f"custom_{start_str}_{end_str}_{timestamp}"
 
-                result = orchestrator.run_pipeline(
-                    start_date=dt_start,
-                    end_date=dt_end
-                )
-
-                if result["status"] == "success":
-                    st.success(f"Pipeline completed! Processed {result['reviews_count']} reviews.")
-                    st.session_state['latest_result'] = result
-                else:
-                    st.error(f"Pipeline failed: {result.get('error', 'Unknown error')}")
+            # Async Submission
+            dt_start = datetime.combine(start_date, datetime.min.time())
+            dt_end = datetime.combine(end_date, datetime.max.time())
+            
+            future = executor.submit(
+                orchestrator.run_pipeline,
+                start_date=dt_start,
+                end_date=dt_end,
+                run_id=custom_run_id
+            )
+            
+            st.session_state['pipeline_future'] = future
+            st.session_state['pipeline_run_id'] = custom_run_id
+            
+            st.toast(f"Pipeline triggered: {custom_run_id}", icon="🚀")
+            time.sleep(1) # Brief pause to let toast show
+            st.rerun()
 
     # --- Maintenance Section ---
     st.divider()
