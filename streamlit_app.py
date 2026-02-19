@@ -103,6 +103,35 @@ def get_orchestrator():
 
 orchestrator = get_orchestrator()
 
+# --- Query Param Handling (Deep Linking) ---
+# Check if a specific report is requested via URL (e.g. /?run_id=2023-W23)
+query_params = st.query_params
+if "run_id" in query_params:
+    target_run_id = query_params["run_id"]
+    # Only load if not already loaded or different
+    if st.session_state.get('latest_result', {}).get('run_id') != target_run_id:
+        processed_dir = "data/processed"
+        analysis_path = os.path.join(processed_dir, f"analysis_{target_run_id}.json")
+        email_path = os.path.join(processed_dir, f"pulse_email_{target_run_id}.html")
+        
+        if os.path.exists(email_path):
+            t_count = 0
+            if os.path.exists(analysis_path):
+                try:
+                    with open(analysis_path, 'r') as af:
+                        t_count = len(json.load(af))
+                except: pass
+            
+            st.session_state['latest_result'] = {
+                "status": "success",
+                "run_id": target_run_id,
+                "reviews_count": "N/A", 
+                "themes_count": t_count,
+                "artifacts": {
+                    "email_html": email_path
+                }
+            }
+
 # --- Page Header ---
 logo_col, title_col = st.columns([0.08, 0.92], vertical_alignment="center")
 with logo_col:
@@ -306,29 +335,8 @@ else:
 
                 col_name, col_range, col_date, col_dl = st.columns([3, 3, 3, 1])
                 with col_name:
-                    if st.button(f"📄 {run_id}", key=f"load_{run_id}", help="View Report"):
-                        # Load data for this run
-                        analysis_path = os.path.join(processed_dir, f"analysis_{run_id}.json")
-                        # Try to count themes/reviews if possible, gracefully handle missing
-                        t_count = 0
-                        r_count = 0
-                        if os.path.exists(analysis_path):
-                            try:
-                                with open(analysis_path, 'r') as af:
-                                    t_count = len(json.load(af))
-                            except: pass
-                        
-                        # Set session state to show this report
-                        st.session_state['latest_result'] = {
-                            "status": "success",
-                            "run_id": run_id,
-                            "reviews_count": "N/A", # Simplified for now as we don't scan all raw files effortlessly
-                            "themes_count": t_count,
-                            "artifacts": {
-                                "email_html": fpath
-                            }
-                        }
-                        st.rerun()
+                    # Hyperlink style (no button box)
+                    st.markdown(f"📄 [{run_id}](/?run_id={run_id})")
 
                 with col_range:
                     if date_range_str:
