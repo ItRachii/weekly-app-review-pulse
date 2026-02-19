@@ -81,8 +81,6 @@ class EmailGenerator:
       .action-row:last-child {{ border-bottom: none; }}
       .action-cell {{ padding: 12px 0; vertical-align: top; font-size: 13px; }}
       .priority-tag {{ background: #0B0B21; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; }}
-      .priority-p0 {{ background: #D0021B; }}
-      .priority-p1 {{ background: #F5A623; color: #333; }}
 
       /* Footer */
       .footer {{ padding: 30px; background: #F8F9FA; text-align: center; font-size: 11px; color: #888; border-top: 1px solid #EEEEEE; }}
