@@ -306,16 +306,25 @@ else:
 
         if html_files:
             # Markdown reports hidden to only show Email (HTML) reports
-            for f in html_files:
+            
+            # Use columns for a table-like header
+            h1, h2, h3, h4, h5 = st.columns([1, 4, 3, 3, 2])
+            h1.markdown("**S.No.**")
+            h2.markdown("**Run ID**")
+            h3.markdown("**Date Range**")
+            h4.markdown("**Generated On**")
+            h5.markdown("**Download**")
+            
+            st.divider()
+
+            for idx, f in enumerate(html_files):
                 fpath = os.path.join(processed_dir, f)
                 mod_time = datetime.fromtimestamp(os.path.getmtime(fpath))
-                date_label = mod_time.strftime("%b %d, %Y  •  %I:%M %p")
+                date_label = mod_time.strftime("%b %d, %Y %I:%M %p")
                 
-                # Parse date range from filename
-                date_range_str = ""
                 # Parse run_id and date range
                 run_id = f.replace("pulse_email_", "").replace(".html", "")
-                date_range_str = ""
+                date_range_str = "-"
                 try:
                     if run_id.startswith("custom_"):
                         # Format: custom_YYYYMMDD_YYYYMMDD_timestamp
@@ -333,19 +342,20 @@ else:
                 except Exception:
                     pass
 
-                col_name, col_range, col_date, col_dl = st.columns([3, 3, 3, 1])
-                with col_name:
-                    # Hyperlink style (no button box)
-                    st.markdown(f"📄 [{run_id}](/?run_id={run_id})")
-
-                with col_range:
-                    if date_range_str:
-                        st.caption(f"📅 {date_range_str}")
-                with col_date:
-                    st.caption(f"🕒 {date_label}")
-                with col_dl:
+                c1, c2, c3, c4, c5 = st.columns([1, 4, 3, 3, 2])
+                with c1:
+                    st.text(f"{idx + 1}")
+                with c2:
+                    st.markdown(f"[{run_id}](/?run_id={run_id})")
+                with c3:
+                    st.text(date_range_str)
+                with c4:
+                    st.text(date_label)
+                with c5:
                     with open(fpath, 'r', encoding='utf-8') as fp:
                         st.download_button("⬇", fp.read(), file_name=f, mime="text/html", key=f"dl_html_{f}")
+                
+                st.divider()
         else:
             st.caption("No historical reports found yet. Generate your first pulse report to get started.")
     else:
