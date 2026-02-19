@@ -280,12 +280,35 @@ else:
                 fpath = os.path.join(processed_dir, f)
                 mod_time = datetime.fromtimestamp(os.path.getmtime(fpath))
                 date_label = mod_time.strftime("%b %d, %Y  •  %I:%M %p")
+                
+                # Parse date range from filename
+                date_range_str = ""
+                try:
+                    # Expected: pulse_email_{run_id}.html
+                    run_id = f.replace("pulse_email_", "").replace(".html", "")
+                    if run_id.startswith("custom_"):
+                        # Format: custom_YYYYMMDD_YYYYMMDD_timestamp
+                        parts = run_id.split('_')
+                        if len(parts) >= 3:
+                            s = datetime.strptime(parts[1], "%Y%m%d")
+                            e = datetime.strptime(parts[2], "%Y%m%d")
+                            date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d, %Y')}"
+                    elif "-W" in run_id:
+                        # Format: YYYY-Www
+                        year, week = run_id.split("-W")
+                        start = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
+                        end = start + timedelta(days=6)
+                        date_range_str = f"{start.strftime('%b %d')} - {end.strftime('%b %d, %Y')}"
+                except Exception:
+                    pass
 
                 col_name, col_date, col_dl = st.columns([3, 3, 1])
                 with col_name:
                     st.markdown(f"📧 `{f}`")
+                    if date_range_str:
+                        st.caption(f"📅 Range: {date_range_str}")
                 with col_date:
-                    st.caption(f"🕒 {date_label}")
+                    st.caption(f"🕒 Generated: {date_label}")
                 with col_dl:
                     with open(fpath, 'r', encoding='utf-8') as fp:
                         st.download_button("⬇", fp.read(), file_name=f, mime="text/html", key=f"dl_html_{f}")
