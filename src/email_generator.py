@@ -60,7 +60,7 @@ class EmailGenerator:
           </ul>
         </div>
         <div class="footer">
-          <div style="font-weight: bold; color: #5367F5; margin-bottom: 8px;">
+          <div style="font-weight: bold; color: #B1D0FB; margin-bottom: 8px;">
             Follow us yet?<br>
             Our social is a treasure box of finance content
           </div>
