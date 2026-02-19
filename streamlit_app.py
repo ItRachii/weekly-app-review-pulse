@@ -116,17 +116,25 @@ if "run_id" in query_params:
         
         if os.path.exists(email_path):
             t_count = 0
-            if os.path.exists(analysis_path):
-                try:
-                    with open(analysis_path, 'r') as af:
-                        t_count = len(json.load(af))
-                except: pass
+            # Try to load stats from DB first
+            run_log = orchestrator.data_manager.get_run_log(target_run_id)
+            reviews_count = run_log.get('reviews_processed', 'N/A')
+            themes_count = run_log.get('themes_identified', 'N/A')
+
+            # Fallback to file reading if DB miss
+            if not run_log:
+                if os.path.exists(analysis_path):
+                    try:
+                        with open(analysis_path, 'r') as af:
+                            t_count = len(json.load(af))
+                            themes_count = t_count
+                    except: pass
             
             st.session_state['latest_result'] = {
                 "status": "success",
                 "run_id": target_run_id,
-                "reviews_count": "N/A", 
-                "themes_count": t_count,
+                "reviews_count": reviews_count, 
+                "themes_count": themes_count,
                 "artifacts": {
                     "email_html": email_path
                 }

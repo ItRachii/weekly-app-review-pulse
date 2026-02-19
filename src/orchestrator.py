@@ -187,6 +187,15 @@ class PulseOrchestrator:
             with open(email_path, 'w', encoding='utf-8') as f:
                 f.write(email_html)
 
+            # Persist run log
+            self.data_manager.save_run_log({
+                "run_id": run_id,
+                "start_date": start_date.date().isoformat(),
+                "end_date": end_date.date().isoformat(),
+                "reviews_processed": total_reviews,
+                "themes_identified": len(themes)
+            })
+
             # 5. Finalize
             if not is_custom_run:
                 self._mark_week_completed()

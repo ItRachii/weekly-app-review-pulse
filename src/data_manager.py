@@ -39,6 +39,16 @@ class DataManager:
                     PRIMARY KEY (platform, scrape_date)
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS run_history (
+                    run_id TEXT PRIMARY KEY,
+                    start_date TEXT,
+                    end_date TEXT,
+                    reviews_processed INTEGER,
+                    themes_identified INTEGER,
+                    created_at TEXT
+                )
+            """)
             conn.commit()
 
     def get_cached_reviews(self, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
@@ -128,20 +138,34 @@ class DataManager:
             cursor = conn.execute("SELECT 1 FROM scrape_history WHERE platform = ? LIMIT 1", (platform,))
             return cursor.fetchone() is not None
 
-    def mark_scraped(self, platform: str, start_date: datetime, end_date: datetime):
-        """Marks a range as successfully scraped."""
-        days = (end_date - start_date).days + 1
-        with sqlite3.connect(self.DB_PATH) as conn:
-            for i in range(days):
-                day = (start_date + timedelta(days=i)).date().isoformat()
-                conn.execute("INSERT OR IGNORE INTO scrape_history (platform, scrape_date) VALUES (?, ?)", (platform, day))
-            conn.commit()
+    def save_run_log(self, run_data: Dict[str, Any]):
+        """Saves execution run metadata."""
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO run_history (run_id, start_date, end_date, reviews_processed, themes_identified, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    run_data['run_id'],
+                    run_data['start_date'],
+                    run_data['end_date'],
+                    run_data['reviews_processed'],
+                    run_data['themes_identified'],
+                    datetime.now().isoformat()
+                ))
+                conn.commit()
+            logger.info(f"Saved run log for {run_data['run_id']}")
+        except Exception as e:
+            logger.error(f"Failed to save run log: {e}")
 
-    def reset_database(self):
-        """Drops and recreates all tables to purge all records."""
-        with sqlite3.connect(self.DB_PATH) as conn:
-            conn.execute("DROP TABLE IF EXISTS reviews")
-            conn.execute("DROP TABLE IF EXISTS scrape_history")
-            conn.commit()
-        self._init_db()
-        logger.info("Database reset successfully.")
+    def get_run_log(self, run_id: str) -> Dict[str, Any]:
+        """Retrieves metadata for a specific run."""
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute("SELECT * FROM run_history WHERE run_id = ?", (run_id,))
+                row = cursor.fetchone()
+                return dict(row) if row else {}
+        except Exception as e:
+            logger.error(f"Failed to get run log: {e}")
+            return {}
