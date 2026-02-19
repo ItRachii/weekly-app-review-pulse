@@ -294,6 +294,7 @@ if 'latest_result' in st.session_state:
     
     if st.button("←"):
         del st.session_state['latest_result']
+        st.query_params.clear()
         st.rerun()
 
     col1, col2 = st.columns([2, 1])
@@ -437,7 +438,7 @@ else:
                 with c1:
                     st.markdown(f"**{row_idx}**")
                 with c2:
-                    st.markdown(f'<a href="/?run_id={run_id}" target="_self" style="color:#5367F5; text-decoration:none;">{run_id}</a>', unsafe_allow_html=True)
+                    st.markdown(f'<a href="/?run_id={run_id}" target="_self" style="text-decoration: underline;">{run_id}</a>', unsafe_allow_html=True)
                 with c3:
                     st.caption(status_badge)
                 with c4:
