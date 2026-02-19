@@ -29,7 +29,7 @@ class PulseOrchestrator:
 
     def __init__(self, weeks_back: int = 12):
         self.weeks_back = weeks_back
-        self.db = DataManager()
+        self.data_manager = DataManager()
         os.makedirs('data/raw', exist_ok=True)
         os.makedirs('data/processed', exist_ok=True)
 
