@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import json
 from datetime import datetime, timedelta
 import streamlit.components.v1 as components
 from PIL import Image
@@ -283,9 +284,10 @@ else:
                 
                 # Parse date range from filename
                 date_range_str = ""
+                # Parse run_id and date range
+                run_id = f.replace("pulse_email_", "").replace(".html", "")
+                date_range_str = ""
                 try:
-                    # Expected: pulse_email_{run_id}.html
-                    run_id = f.replace("pulse_email_", "").replace(".html", "")
                     if run_id.startswith("custom_"):
                         # Format: custom_YYYYMMDD_YYYYMMDD_timestamp
                         parts = run_id.split('_')
@@ -302,9 +304,32 @@ else:
                 except Exception:
                     pass
 
-                col_name, col_range, col_date, col_dl = st.columns([4, 3, 3, 1])
+                col_name, col_range, col_date, col_dl = st.columns([3, 3, 3, 1])
                 with col_name:
-                    st.markdown(f"📧 `{f}`")
+                    if st.button(f"📄 {run_id}", key=f"load_{run_id}", help="View Report"):
+                        # Load data for this run
+                        analysis_path = os.path.join(processed_dir, f"analysis_{run_id}.json")
+                        # Try to count themes/reviews if possible, gracefully handle missing
+                        t_count = 0
+                        r_count = 0
+                        if os.path.exists(analysis_path):
+                            try:
+                                with open(analysis_path, 'r') as af:
+                                    t_count = len(json.load(af))
+                            except: pass
+                        
+                        # Set session state to show this report
+                        st.session_state['latest_result'] = {
+                            "status": "success",
+                            "run_id": run_id,
+                            "reviews_count": "N/A", # Simplified for now as we don't scan all raw files effortlessly
+                            "themes_count": t_count,
+                            "artifacts": {
+                                "email_html": fpath
+                            }
+                        }
+                        st.rerun()
+
                 with col_range:
                     if date_range_str:
                         st.caption(f"📅 {date_range_str}")
