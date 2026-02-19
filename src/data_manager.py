@@ -138,6 +138,24 @@ class DataManager:
             cursor = conn.execute("SELECT 1 FROM scrape_history WHERE platform = ? LIMIT 1", (platform,))
             return cursor.fetchone() is not None
 
+    def mark_scraped(self, platform: str, start_date: datetime, end_date: datetime):
+        """Marks a range as successfully scraped."""
+        days = (end_date - start_date).days + 1
+        with sqlite3.connect(self.DB_PATH) as conn:
+            for i in range(days):
+                day = (start_date + timedelta(days=i)).date().isoformat()
+                conn.execute("INSERT OR IGNORE INTO scrape_history (platform, scrape_date) VALUES (?, ?)", (platform, day))
+            conn.commit()
+
+    def reset_database(self):
+        """Drops and recreates all tables to purge all records."""
+        with sqlite3.connect(self.DB_PATH) as conn:
+            conn.execute("DROP TABLE IF EXISTS reviews")
+            conn.execute("DROP TABLE IF EXISTS scrape_history")
+            conn.commit()
+        self._init_db()
+        logger.info("Database reset successfully.")
+
     def save_run_log(self, run_data: Dict[str, Any]):
         """Saves execution run metadata."""
         try:
