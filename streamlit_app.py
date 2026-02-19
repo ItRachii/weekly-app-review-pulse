@@ -180,18 +180,8 @@ if 'pipeline_future' in st.session_state:
         # Clear future — polling complete
         del st.session_state['pipeline_future']
     else:
-        # Still running — show banner and let page render fully
-        run_id_label = st.session_state.get('pipeline_run_id', 'Unknown')
-        st.info(f"⏳ Pipeline running: **{run_id_label}**")
-        # Auto-dismiss info banner after 10s via JS
-        components.html("""
-            <script>
-            setTimeout(function() {
-                var alerts = window.parent.document.querySelectorAll('[data-testid="stAlert"]');
-                alerts.forEach(function(el) { el.style.display = 'none'; });
-            }, 10000);
-            </script>
-        """, height=0)
+        # Still running — page renders fully, JS auto-refresh at bottom handles polling
+        pass
 
 # --- Sidebar ---
 with st.sidebar:
