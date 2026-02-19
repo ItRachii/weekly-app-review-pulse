@@ -110,43 +110,6 @@ def get_executor():
 orchestrator = get_orchestrator()
 executor = get_executor()
 
-# --- Async Pipeline Status Check ---
-if 'pipeline_future' in st.session_state:
-    future = st.session_state['pipeline_future']
-    if future.done():
-        try:
-            result = future.result()
-            if result["status"] == "success":
-                st.toast(f"✅ Pipeline Succeeded! Reviews: {result['reviews_count']}", icon="✅")
-                st.session_state['latest_result'] = result
-                st.session_state['pipeline_status'] = 'succeeded'
-            else:
-                err = result.get('error', 'Unknown error')
-                st.toast(f"❌ Pipeline Failed: {err}", icon="❌")
-                st.session_state['pipeline_status'] = 'failed'
-                st.session_state['pipeline_error'] = err
-        except Exception as e:
-            st.session_state['pipeline_status'] = 'failed'
-            st.session_state['pipeline_error'] = str(e)
-        
-        # Clear future — polling complete
-        del st.session_state['pipeline_future']
-    else:
-        # Still running — auto-poll every 3 seconds
-        run_id_label = st.session_state.get('pipeline_run_id', 'Unknown')
-        info_placeholder = st.empty()
-        info_placeholder.info(f"⏳ Pipeline running: **{run_id_label}**")
-        # Auto-dismiss info after 10s via JS
-        components.html("""
-            <script>
-            setTimeout(function() {
-                var alerts = window.parent.document.querySelectorAll('[data-testid="stAlert"]');
-                alerts.forEach(function(el) { el.style.display = 'none'; });
-            }, 10000);
-            </script>
-        """, height=0)
-        time.sleep(3)
-        st.rerun()
 
 # --- Query Param Handling (Deep Linking) ---
 # Check if a specific report is requested via URL (e.g. /?run_id=2023-W23)
@@ -196,6 +159,42 @@ with title_col:
     st.title("Groww - Weekly App Review Pulse")
     st.markdown("Automated sentiment analysis and executive reporting for app store reviews.")
 
+# --- Async Pipeline Status Check (placed AFTER header to avoid displacing title) ---
+if 'pipeline_future' in st.session_state:
+    future = st.session_state['pipeline_future']
+    if future.done():
+        try:
+            result = future.result()
+            if result["status"] == "success":
+                st.toast(f"✅ Pipeline Succeeded! Reviews: {result['reviews_count']}", icon="✅")
+                st.session_state['latest_result'] = result
+                st.session_state['pipeline_status'] = 'succeeded'
+            else:
+                err = result.get('error', 'Unknown error')
+                st.toast(f"❌ Pipeline Failed: {err}", icon="❌")
+                st.session_state['pipeline_status'] = 'failed'
+                st.session_state['pipeline_error'] = err
+        except Exception as e:
+            st.session_state['pipeline_status'] = 'failed'
+            st.session_state['pipeline_error'] = str(e)
+        # Clear future — polling complete
+        del st.session_state['pipeline_future']
+    else:
+        # Still running — auto-poll every 30 seconds
+        run_id_label = st.session_state.get('pipeline_run_id', 'Unknown')
+        st.info(f"⏳ Pipeline running: **{run_id_label}**")
+        # Auto-dismiss info after 10s via JS
+        components.html("""
+            <script>
+            setTimeout(function() {
+                var alerts = window.parent.document.querySelectorAll('[data-testid="stAlert"]');
+                alerts.forEach(function(el) { el.style.display = 'none'; });
+            }, 10000);
+            </script>
+        """, height=0)
+        time.sleep(30)
+        st.rerun()
+
 # --- Sidebar ---
 with st.sidebar:
     st.header("Pipeline Configuration")
@@ -227,6 +226,15 @@ with st.sidebar:
             
             st.session_state['pipeline_future'] = future
             st.session_state['pipeline_run_id'] = custom_run_id
+            st.session_state['pipeline_status'] = 'running'
+            # Record in pending so history shows it immediately
+            st.session_state.setdefault('pipeline_pending', {})[custom_run_id] = {
+                'run_id': custom_run_id,
+                'start_date': start_date.strftime('%Y%m%d'),
+                'end_date': end_date.strftime('%Y%m%d'),
+                'triggered_at': datetime.now().strftime('%b %d, %Y %I:%M %p'),
+                'date_range_str': f"{start_date.strftime('%b %d')} - {end_date.strftime('%b %d %Y')}",
+            }
             
             st.toast(f"Pipeline triggered: {custom_run_id}", icon="🚀")
             time.sleep(1) # Brief pause to let toast show
@@ -366,7 +374,7 @@ else:
             reverse=True
         )
 
-        if html_files:
+        if 'pipeline_pending' in st.session_state or html_files:
             # Use columns for a table-like header
             h1, h2, h3, h4, h5, h6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
             h1.markdown("**S.No.**")
@@ -375,10 +383,35 @@ else:
             h4.markdown("**Date Range**")
             h5.markdown("**Generated On**")
             h6.markdown("**Download**")
-            
             st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
 
-            for idx, f in enumerate(html_files):
+            row_idx = 1
+
+            # --- Show in-flight (pending) runs first ---
+            active_run_id = st.session_state.get('pipeline_run_id')
+            pending = st.session_state.get('pipeline_pending', {})
+            for pid, pinfo in pending.items():
+                # Determine live status
+                if pid == active_run_id and 'pipeline_future' in st.session_state:
+                    status_badge = "🟡 Running"
+                elif st.session_state.get('pipeline_status') == 'failed' and pid == active_run_id:
+                    status_badge = "🔴 Failed"
+                else:
+                    # Already completed — skip (will appear in html_files below)
+                    continue
+
+                c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
+                with c1: st.markdown(f"**{row_idx}**")
+                with c2: st.markdown(f"{pinfo['run_id']}")
+                with c3: st.caption(status_badge)
+                with c4: st.caption(pinfo['date_range_str'])
+                with c5: st.caption(pinfo['triggered_at'])
+                with c6: st.caption("—")
+                st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
+                row_idx += 1
+
+            # --- Show completed runs from filesystem ---
+            for f in html_files:
                 fpath = os.path.join(processed_dir, f)
                 mod_time = datetime.fromtimestamp(os.path.getmtime(fpath))
                 date_label = mod_time.strftime("%b %d, %Y %I:%M %p")
@@ -388,14 +421,12 @@ else:
                 date_range_str = "-"
                 try:
                     if run_id.startswith("custom_"):
-                        # Format: custom_YYYYMMDD_YYYYMMDD_timestamp
                         parts = run_id.split('_')
                         if len(parts) >= 3:
                             s = datetime.strptime(parts[1], "%Y%m%d")
                             e = datetime.strptime(parts[2], "%Y%m%d")
                             date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
                     elif "-W" in run_id:
-                        # Format: YYYY-Www
                         year, week = run_id.split("-W")
                         start = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
                         end = start + timedelta(days=6)
@@ -404,20 +435,19 @@ else:
                     pass
 
                 # Determine pipeline status for this run
-                active_run_id = st.session_state.get('pipeline_run_id')
                 pipeline_status_for_run = st.session_state.get('pipeline_status')
-                if active_run_id == run_id and 'pipeline_future' in st.session_state:
-                    status_badge = "🟡 Running"
-                elif active_run_id == run_id and pipeline_status_for_run == 'failed':
+                if active_run_id == run_id and pipeline_status_for_run == 'failed':
                     status_badge = "🔴 Failed"
-                elif active_run_id == run_id and pipeline_status_for_run == 'succeeded':
-                    status_badge = "🟢 Succeeded"
                 else:
                     status_badge = "🟢 Succeeded"
 
+                # Remove from pending once file exists
+                if run_id in st.session_state.get('pipeline_pending', {}):
+                    del st.session_state['pipeline_pending'][run_id]
+
                 c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
                 with c1:
-                    st.markdown(f"**{idx + 1}**")
+                    st.markdown(f"**{row_idx}**")
                 with c2:
                     st.markdown(f"[{run_id}](/?run_id={run_id})")
                 with c3:
@@ -429,8 +459,8 @@ else:
                 with c6:
                     with open(fpath, 'r', encoding='utf-8') as fp:
                         st.download_button("⬇", fp.read(), file_name=f, mime="text/html", key=f"dl_html_{f}")
-                
                 st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
+                row_idx += 1
         else:
             st.caption("No historical reports found yet. Generate your first pulse report to get started.")
     else:
