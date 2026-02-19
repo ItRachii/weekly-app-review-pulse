@@ -180,10 +180,10 @@ if 'pipeline_future' in st.session_state:
         # Clear future — polling complete
         del st.session_state['pipeline_future']
     else:
-        # Still running — auto-poll every 30 seconds
+        # Still running — show banner and let page render fully
         run_id_label = st.session_state.get('pipeline_run_id', 'Unknown')
         st.info(f"⏳ Pipeline running: **{run_id_label}**")
-        # Auto-dismiss info after 10s via JS
+        # Auto-dismiss info banner after 10s via JS
         components.html("""
             <script>
             setTimeout(function() {
@@ -192,8 +192,6 @@ if 'pipeline_future' in st.session_state:
             }, 10000);
             </script>
         """, height=0)
-        time.sleep(30)
-        st.rerun()
 
 # --- Sidebar ---
 with st.sidebar:
@@ -465,3 +463,14 @@ else:
             st.caption("No historical reports found yet. Generate your first pulse report to get started.")
     else:
         st.caption("No historical reports found yet. Generate your first pulse report to get started.")
+
+# --- Auto-refresh while pipeline is running (JS-based, non-blocking) ---
+if 'pipeline_future' in st.session_state and not st.session_state['pipeline_future'].done():
+    components.html("""
+        <script>
+        // Reload the parent Streamlit app after 30 seconds
+        setTimeout(function() {
+            window.parent.location.reload();
+        }, 30000);
+        </script>
+    """, height=0)
