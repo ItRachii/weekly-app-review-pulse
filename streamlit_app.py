@@ -117,23 +117,36 @@ if 'pipeline_future' in st.session_state:
         try:
             result = future.result()
             if result["status"] == "success":
-                st.toast(f"Pipeline Succeeded! Reviews: {result['reviews_count']}", icon="✅")
-                st.success(f"Pipeline completed! [View Report](/?run_id={result['run_id']})")
+                st.toast(f"✅ Pipeline Succeeded! Reviews: {result['reviews_count']}", icon="✅")
                 st.session_state['latest_result'] = result
+                st.session_state['pipeline_status'] = 'succeeded'
             else:
-                st.toast(f"Pipeline Failed: {result.get('error')}", icon="❌")
-                st.error(f"Pipeline failed: {result.get('error')}")
+                err = result.get('error', 'Unknown error')
+                st.toast(f"❌ Pipeline Failed: {err}", icon="❌")
+                st.session_state['pipeline_status'] = 'failed'
+                st.session_state['pipeline_error'] = err
         except Exception as e:
-            st.error(f"Pipeline execution error: {e}")
+            st.session_state['pipeline_status'] = 'failed'
+            st.session_state['pipeline_error'] = str(e)
         
-        # Clear future to stop checking
+        # Clear future — polling complete
         del st.session_state['pipeline_future']
-        if 'pipeline_run_id' in st.session_state:
-            del st.session_state['pipeline_run_id']
     else:
-        # Still running
-        run_id = st.session_state.get('pipeline_run_id', 'Unknown')
-        st.info(f"Pipeline running for {run_id}... You can continue using the app.")
+        # Still running — auto-poll every 3 seconds
+        run_id_label = st.session_state.get('pipeline_run_id', 'Unknown')
+        info_placeholder = st.empty()
+        info_placeholder.info(f"⏳ Pipeline running: **{run_id_label}**")
+        # Auto-dismiss info after 10s via JS
+        components.html("""
+            <script>
+            setTimeout(function() {
+                var alerts = window.parent.document.querySelectorAll('[data-testid="stAlert"]');
+                alerts.forEach(function(el) { el.style.display = 'none'; });
+            }, 10000);
+            </script>
+        """, height=0)
+        time.sleep(3)
+        st.rerun()
 
 # --- Query Param Handling (Deep Linking) ---
 # Check if a specific report is requested via URL (e.g. /?run_id=2023-W23)
@@ -354,15 +367,14 @@ else:
         )
 
         if html_files:
-            # Markdown reports hidden to only show Email (HTML) reports
-            
             # Use columns for a table-like header
-            h1, h2, h3, h4, h5 = st.columns([1, 4, 3, 3, 2], vertical_alignment="center")
+            h1, h2, h3, h4, h5, h6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
             h1.markdown("**S.No.**")
             h2.markdown("**Run ID**")
-            h3.markdown("**Date Range**")
-            h4.markdown("**Generated On**")
-            h5.markdown("**Download**")
+            h3.markdown("**Status**")
+            h4.markdown("**Date Range**")
+            h5.markdown("**Generated On**")
+            h6.markdown("**Download**")
             
             st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
 
@@ -391,16 +403,30 @@ else:
                 except Exception:
                     pass
 
-                c1, c2, c3, c4, c5 = st.columns([1, 4, 3, 3, 2], vertical_alignment="center")
+                # Determine pipeline status for this run
+                active_run_id = st.session_state.get('pipeline_run_id')
+                pipeline_status_for_run = st.session_state.get('pipeline_status')
+                if active_run_id == run_id and 'pipeline_future' in st.session_state:
+                    status_badge = "🟡 Running"
+                elif active_run_id == run_id and pipeline_status_for_run == 'failed':
+                    status_badge = "🔴 Failed"
+                elif active_run_id == run_id and pipeline_status_for_run == 'succeeded':
+                    status_badge = "🟢 Succeeded"
+                else:
+                    status_badge = "🟢 Succeeded"
+
+                c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
                 with c1:
                     st.markdown(f"**{idx + 1}**")
                 with c2:
                     st.markdown(f"[{run_id}](/?run_id={run_id})")
                 with c3:
-                    st.caption(date_range_str)
+                    st.caption(status_badge)
                 with c4:
-                    st.caption(date_label)
+                    st.caption(date_range_str)
                 with c5:
+                    st.caption(date_label)
+                with c6:
                     with open(fpath, 'r', encoding='utf-8') as fp:
                         st.download_button("⬇", fp.read(), file_name=f, mime="text/html", key=f"dl_html_{f}")
                 

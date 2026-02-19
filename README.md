@@ -34,7 +34,9 @@ An automated sentiment analysis and executive reporting pipeline for app store r
 | **HTML Email Reports** | Produces a styled, professional HTML email ready to send via SMTP. |
 | **Incremental Scraping** | Tracks scrape history in SQLite — only fetches data for date ranges not yet covered. |
 | **Idempotency** | Prevents duplicate pipeline runs for the same calendar week (overridable with `--force`). |
-| **Three Interfaces** | Accessible via CLI, REST API (FastAPI), or Streamlit Dashboard. |
+| **Async Pipeline** | Non-blocking execution with background workers and real-time toast notifications. |
+| **Persisted Run History** | Stores execution metadata (Run ID, counts, dates) in SQLite for historical analysis. |
+| **Three Interfaces** | Accessible via CLI, REST API (FastAPI), or Standalone Streamlit Dashboard. |
 | **Groww Brand Theme** | Fully branded UI with Groww's official color palette and logo across dashboard and email reports. |
 | **Structured Logging** | Rotating file logs + console output with configurable log levels. |
 
@@ -111,7 +113,7 @@ Orchestrated by `PulseOrchestrator`, which coordinates the entire pipeline end-t
 weekly-app-review-pulse/
 ├── main.py                  # CLI entry point
 ├── main_api.py              # FastAPI server entry point (with APScheduler)
-├── streamlit_app.py         # Streamlit dashboard (connects to API via HTTP)
+├── streamlit_app.py         # Standalone Streamlit dashboard (Directly imports Orchestrator)
 ├── requirements.txt         # Python dependencies
 ├── .env                     # Environment variables (not committed)
 ├── architecture.md          # Detailed architecture documentation
@@ -278,26 +280,22 @@ The API server also includes an **APScheduler cron job** that automatically runs
 
 Best for interactive use, date range selection, and email sending.
 
-> **Important:** The dashboard communicates with the API server via HTTP. You must start the API server first.
+> **Note:** The dashboard now runs largely standalone by importing the orchestrator directly, but shares the same `data/` directory.
 
 ```bash
-# Terminal 1 — Start the API server
-python main_api.py
-
-# Terminal 2 — Start the dashboard
+# Start the dashboard
 streamlit run streamlit_app.py
 # Dashboard opens at http://localhost:8501
 ```
 
 **Dashboard features:**
 
-- Groww brand theming with official logo and color palette
-- Date range picker for custom analysis windows
-- One-click pipeline execution
-- Inline HTML email preview
-- Direct email sending to any recipient
-- Report history with dates and download buttons
-- Data purge with confirmation safeguard
+- **Async Execution:** Triggers the pipeline in a background thread. You can continue using the app while the report generates.
+- **Real-time Feedback:** Toast notifications for trigger confirmation and run completion.
+- **Deep Linking:** Clickable "Run ID" links in history load reports directly via URL parameters.
+- **Groww Brand Theme:** Fully branded UI with official colors.
+- **Report History:** Tabular view of past runs with "Reviews Processed" stats and download buttons.
+- **Data Maintenance:** Secure "Purge All Data" functionality.
 
 ---
 
@@ -561,7 +559,7 @@ python run_minimal_tests.py
 
 8. **Token budget.** The clustering prompt sends up to 100 reviews to the LLM. For apps with very high review volume, this is a representative sample, not the full set.
 
-9. **Dashboard requires the API server.** The Streamlit dashboard communicates with the FastAPI backend via HTTP (`http://localhost:8000/api/v1`). Always start the API server before the dashboard. The `API_BASE_URL` is configurable at the top of `streamlit_app.py` for production deployments.
+9. **Dashboard is Standalone.** The Streamlit dashboard imports `PulseOrchestrator` directly for simpler deployment. It does NOT require the API server to be running, but they can coexist.
 
 ### Customizing for Your App
 
