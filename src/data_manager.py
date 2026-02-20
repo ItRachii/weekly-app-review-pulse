@@ -175,14 +175,49 @@ class DataManager:
                 conn.execute("INSERT OR IGNORE INTO scrape_history (platform, scrape_date) VALUES (?, ?)", (platform, day))
             conn.commit()
 
-    def reset_database(self):
-        """Drops and recreates all tables to purge all records."""
+    def purge_data(self) -> None:
+        """
+        Atomically deletes all terminal rows from every table and re-creates
+        the schema, leaving the database clean and immediately usable.
+
+        Safety guarantees:
+        - Aborts with RuntimeError if any 'triggered' or 'running' job exists.
+        - All three DELETEs run in one transaction; rolled back on any failure.
+        - Schema is re-created via _init_db() after the transaction commits.
+        """
+        _ACTIVE = ("triggered", "running")
+        logger.warning("Initiating full database purge…")
+
         with sqlite3.connect(self.DB_PATH) as conn:
-            conn.execute("DROP TABLE IF EXISTS reviews")
-            conn.execute("DROP TABLE IF EXISTS scrape_history")
-            conn.commit()
+            # Guard: refuse to purge while any job is actively in-flight
+            active_count = conn.execute(
+                "SELECT COUNT(*) FROM run_history WHERE status IN (?,?)", _ACTIVE
+            ).fetchone()[0]
+            if active_count:
+                raise RuntimeError(
+                    f"Purge aborted: {active_count} active job(s) still running. "
+                    "Wait for all jobs to reach a terminal state first."
+                )
+
+            try:
+                # Chronological order: run metadata → scrape coverage → raw reviews
+                conn.execute("DELETE FROM run_history")
+                conn.execute("DELETE FROM scrape_history")
+                conn.execute("DELETE FROM reviews")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                logger.error("Purge transaction rolled back due to an error.")
+                raise
+
+        # Re-create schema so the DB is immediately usable after purge
         self._init_db()
-        logger.info("Database reset successfully.")
+        logger.info("Database purged and schema re-initialized successfully.")
+
+    def reset_database(self) -> None:
+        """Backwards-compat alias for purge_data(). Existing callers unchanged."""
+        self.purge_data()
+
 
     def upsert_run_log(self, run_data: Dict[str, Any]):
         """Insert-or-replace a run row. Called immediately at trigger time."""

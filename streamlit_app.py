@@ -6,6 +6,7 @@ import streamlit.components.v1 as components
 from PIL import Image
 from src.orchestrator import PulseOrchestrator
 from src.email_service import EmailService
+from src.db_init import ensure_initialized
 import concurrent.futures
 import time
 
@@ -106,6 +107,9 @@ def get_orchestrator():
 def get_executor():
     return concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
+
+# --- Database Initialization (runs once per container; idempotent on reruns) ---
+ensure_initialized()
 
 orchestrator = get_orchestrator()
 executor = get_executor()
@@ -242,10 +246,15 @@ with st.sidebar:
                 if st.button("Confirm", type="primary", use_container_width=True):
                     if st.session_state.get("purge_val", "").strip().lower() == "delete":
                         with st.spinner("Purging all data..."):
-                            if orchestrator.purge_all_data():
+                            try:
+                                orchestrator.purge_all_data()
                                 st.session_state.clear()
                                 st.success("All data has been purged successfully!")
                                 st.rerun()
+                            except RuntimeError as e:
+                                st.error(f"⚠️ Purge blocked: {e}")
+                            except Exception as e:
+                                st.error(f"❌ Purge failed: {e}")
                     else:
                         st.warning("Please type 'delete' to confirm.")
 
@@ -280,6 +289,97 @@ with st.sidebar:
                 """,
                 height=0
             )
+
+@st.fragment(run_every=5)
+def _render_history_table():
+    """
+    Isolated fragment: only this function re-runs every 5 s.
+    The sidebar, header, and report viewer are never touched between polls.
+    """
+    st.subheader("📂 Report History")
+    processed_dir = "data/processed"
+
+    all_runs = orchestrator.data_manager.list_run_history(limit=30)
+
+    in_progress = any(r.get("status") in ("triggered", "running") for r in all_runs)
+    # When nothing is in-flight, st.fragment still renders on user interactions;
+    # the run_every timer simply keeps the table refreshed passively.
+
+    STATUS_EMOJI = {
+        "triggered": "🟡 Triggered",
+        "running":   "🔵 Running",
+        "succeeded": "🟢 Succeeded",
+        "failed":    "🔴 Failed",
+    }
+
+    if all_runs:
+        h1, h2, h3, h4, h5, h6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
+        h1.markdown("**S.No.**")
+        h2.markdown("**Run ID**")
+        h3.markdown("**Status**")
+        h4.markdown("**Date Range**")
+        h5.markdown("**Triggered On**")
+        h6.markdown("**Download**")
+        st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
+
+        for row_idx, run in enumerate(all_runs, start=1):
+            run_id  = run["run_id"]
+            status  = run.get("status", "succeeded")
+            badge   = STATUS_EMOJI.get(status, status)
+
+            # --- Date range ---
+            date_range_str = "-"
+            try:
+                if run_id.startswith("custom_"):
+                    parts = run_id.split('_')
+                    if len(parts) >= 3:
+                        s = datetime.strptime(parts[1], "%Y%m%d")
+                        e = datetime.strptime(parts[2], "%Y%m%d")
+                        date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
+                elif "-W" in run_id:
+                    year, week = run_id.split("-W")
+                    week_start = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
+                    date_range_str = f"{week_start.strftime('%b %d')} - {(week_start + timedelta(days=6)).strftime('%b %d %Y')}"
+                elif run.get("start_date") and run.get("end_date"):
+                    s = datetime.fromisoformat(run["start_date"])
+                    e = datetime.fromisoformat(run["end_date"])
+                    date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
+            except Exception:
+                pass
+
+            # --- Triggered-at ---
+            triggered_label = "-"
+            if run.get("triggered_at"):
+                try:
+                    triggered_label = datetime.fromisoformat(run["triggered_at"]).strftime("%b %d, %Y %I:%M %p")
+                except Exception:
+                    triggered_label = run["triggered_at"][:16]
+
+            # --- Email file ---
+            email_path = os.path.join(processed_dir, f"pulse_email_{run_id}.html")
+            has_file   = os.path.exists(email_path)
+
+            c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
+            with c1: st.markdown(f"**{row_idx}**")
+            with c2:
+                if has_file:
+                    st.markdown(f'<a href="/?run_id={run_id}" target="_self" style="text-decoration:underline">{run_id}</a>', unsafe_allow_html=True)
+                else:
+                    st.markdown(run_id)
+            with c3: st.caption(badge)
+            with c4: st.caption(date_range_str)
+            with c5: st.caption(triggered_label)
+            with c6:
+                if has_file:
+                    with open(email_path, 'r', encoding='utf-8') as fp:
+                        st.download_button("⬇", fp.read(), file_name=f"pulse_email_{run_id}.html",
+                                           mime="text/html", key=f"dl_html_{run_id}")
+                else:
+                    st.caption("—")
+            st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
+    else:
+        st.caption("No historical reports found yet. Generate your first pulse report to get started.")
+
 
 # --- Main Content Area ---
 if 'latest_result' in st.session_state:
@@ -341,98 +441,4 @@ if 'latest_result' in st.session_state:
         })
 else:
     st.info("Select a date range and click 'Generate Pulse Report' to get started.")
-
-    # --- Report History (DB-driven, shows all statuses) ---
-    st.subheader("📂 Report History")
-    processed_dir = "data/processed"
-
-    # Fetch all runs from DB — no status filter
-    all_runs = orchestrator.data_manager.list_run_history(limit=30)
-
-    # Silent poll: inject a JS reload every 5 s while any job is in-flight (non-blocking)
-    in_progress = any(r.get("status") in ("triggered", "running") for r in all_runs)
-    if in_progress:
-        components.html(
-            "<script>setTimeout(()=>window.parent.location.reload(),5000);</script>",
-            height=0,
-        )
-
-    STATUS_EMOJI = {
-        "triggered": "🟡 Triggered",
-        "running":   "🔵 Running",
-        "succeeded": "🟢 Succeeded",
-        "failed":    "🔴 Failed",
-    }
-
-    if all_runs:
-        h1, h2, h3, h4, h5, h6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
-        h1.markdown("**S.No.**")
-        h2.markdown("**Run ID**")
-        h3.markdown("**Status**")
-        h4.markdown("**Date Range**")
-        h5.markdown("**Triggered On**")
-        h6.markdown("**Download**")
-        st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
-
-        for row_idx, run in enumerate(all_runs, start=1):
-            run_id    = run["run_id"]
-            status    = run.get("status", "succeeded")
-            badge     = STATUS_EMOJI.get(status, status)
-
-            # --- Date range label ---
-            date_range_str = "-"
-            try:
-                if run_id.startswith("custom_"):
-                    parts = run_id.split('_')
-                    if len(parts) >= 3:
-                        s = datetime.strptime(parts[1], "%Y%m%d")
-                        e = datetime.strptime(parts[2], "%Y%m%d")
-                        date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
-                elif "-W" in run_id:
-                    year, week = run_id.split("-W")
-                    week_start = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
-                    date_range_str = f"{week_start.strftime('%b %d')} - {(week_start + timedelta(days=6)).strftime('%b %d %Y')}"
-                elif run.get("start_date") and run.get("end_date"):
-                    s = datetime.fromisoformat(run["start_date"])
-                    e = datetime.fromisoformat(run["end_date"])
-                    date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
-            except Exception:
-                pass
-
-            # --- Triggered-at label ---
-            triggered_label = "-"
-            if run.get("triggered_at"):
-                try:
-                    triggered_label = datetime.fromisoformat(run["triggered_at"]).strftime("%b %d, %Y %I:%M %p")
-                except Exception:
-                    triggered_label = run["triggered_at"][:16]
-
-            # --- Email file path (only for succeeded) ---
-            email_path = os.path.join(processed_dir, f"pulse_email_{run_id}.html")
-            has_file   = os.path.exists(email_path)
-
-            c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
-            with c1:
-                st.markdown(f"**{row_idx}**")
-            with c2:
-                if has_file:
-                    st.markdown(f'<a href="/?run_id={run_id}" target="_self" style="text-decoration: underline;">{run_id}</a>', unsafe_allow_html=True)
-                else:
-                    st.markdown(run_id)
-            with c3:
-                st.caption(badge)
-            with c4:
-                st.caption(date_range_str)
-            with c5:
-                st.caption(triggered_label)
-            with c6:
-                if has_file:
-                    with open(email_path, 'r', encoding='utf-8') as fp:
-                        st.download_button("⬇", fp.read(), file_name=f"pulse_email_{run_id}.html",
-                                           mime="text/html", key=f"dl_html_{run_id}")
-                else:
-                    st.caption("—")
-            st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
-    else:
-        st.caption("No historical reports found yet. Generate your first pulse report to get started.")
-
+    _render_history_table()

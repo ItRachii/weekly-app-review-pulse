@@ -73,3 +73,39 @@ def test_update_run_status_transition(db):
     assert row["completed_at"] is not None
     # Still exactly one row in history
     assert len([r for r in db.list_run_history() if r["run_id"] == "r2"]) == 1
+
+
+# --- Regression tests for purge fix ---
+
+def test_purge_clears_all_tables(db):
+    """purge_data() must wipe run_history, reviews, and scrape_history atomically."""
+    now = datetime.now().isoformat()
+    # Seed all three tables
+    db.upsert_run_log({"run_id": "rp1", "status": "succeeded", "triggered_at": now})
+    db.save_reviews([{"platform": "ios", "rating": 5,
+                      "reviewText": "good", "date": now}])
+    db.mark_scraped("ios", datetime(2024, 1, 1), datetime(2024, 1, 1))
+
+    db.purge_data()
+
+    # All three must be empty
+    assert db.list_run_history() == [], "run_history must be empty after purge"
+    assert db.get_cached_reviews(datetime(2000, 1, 1), datetime(2099, 1, 1)) == [], \
+        "reviews must be empty after purge"
+    # scrape_history cleared → full range is missing again
+    ranges = db.get_missing_ranges(datetime(2024, 1, 1), datetime(2024, 1, 1), "ios")
+    assert len(ranges) == 1, "scrape_history must be empty after purge"
+
+
+def test_purge_blocked_by_active_job(db):
+    """purge_data() must raise and leave the DB intact when a job is in-flight."""
+    now = datetime.now().isoformat()
+    db.upsert_run_log({"run_id": "rp2", "status": "running", "triggered_at": now})
+
+    with pytest.raises(RuntimeError, match="active job"):
+        db.purge_data()
+
+    # The active row must still be present — no partial purge
+    assert db.get_run_log("rp2")["status"] == "running", \
+        "Active job row must survive a blocked purge"
+

@@ -8,9 +8,14 @@ venv/
 .env
 
 # Data and Logs
+data/*.db
 data/*.json
 data/*.csv
 !data/sample_reviews.csv
+data/raw/*.json
+data/processed/*.json
+data/processed/*.md
+data/processed/*.html
 *.log
 
 # IDEs

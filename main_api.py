@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from api.routes import router
 from apscheduler.schedulers.background import BackgroundScheduler
 from src.orchestrator import PulseOrchestrator
+from src.db_init import ensure_initialized
 from utils.logger import setup_logger
 from datetime import datetime
 
@@ -27,6 +28,7 @@ scheduler.add_job(scheduled_pulse_job, 'cron', day_of_week='mon', hour=9, minute
 
 @app.on_event("startup")
 async def startup_event():
+    ensure_initialized()   # schema-first, before any business logic
     logger.info("Starting Pulse Report API server...")
     scheduler.start()
     logger.info("Scheduler started successfully (Cron: Every Monday at 09:00 AM)")

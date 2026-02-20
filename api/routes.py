@@ -73,6 +73,55 @@ async def get_run(run_id: str):
     return row
 
 
+def _format_date_range(run: dict) -> str:
+    """Helper: human-readable date range from a run_history row."""
+    run_id = run.get("run_id", "")
+    try:
+        if run_id.startswith("custom_"):
+            parts = run_id.split("_")
+            if len(parts) >= 3:
+                from datetime import datetime as _dt
+                s = _dt.strptime(parts[1], "%Y%m%d")
+                e = _dt.strptime(parts[2], "%Y%m%d")
+                return f"{s.strftime('%b %d')} – {e.strftime('%b %d %Y')}"
+        elif "-W" in run_id:
+            from datetime import datetime as _dt
+            year, week = run_id.split("-W")
+            ws = _dt.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
+            return f"{ws.strftime('%b %d')} – {(ws + __import__('datetime').timedelta(days=6)).strftime('%b %d %Y')}"
+        elif run.get("start_date") and run.get("end_date"):
+            from datetime import datetime as _dt
+            s = _dt.fromisoformat(run["start_date"])
+            e = _dt.fromisoformat(run["end_date"])
+            return f"{s.strftime('%b %d')} – {e.strftime('%b %d %Y')}"
+    except Exception:
+        pass
+    return "—"
+
+
+@router.get("/pipeline/jobs")
+async def list_pipeline_jobs(limit: int = 20):
+    """
+    Lightweight polling endpoint for the dashboard history table.
+    Returns a stable job list with draft_report_url once the report is ready.
+    Fast: single indexed DB read, no filesystem scan.
+    """
+    runs = orchestrator.data_manager.list_run_history(limit=limit)
+    jobs = []
+    for r in runs:
+        run_id = r.get("run_id", "")
+        email_path = os.path.join("data", "processed", f"pulse_email_{run_id}.html")
+        jobs.append({
+            "job_id":           run_id,
+            "status":           r.get("status", "unknown"),
+            "date_range":       _format_date_range(r),
+            "triggered_at":     r.get("triggered_at"),
+            "completed_at":     r.get("completed_at"),
+            "draft_report_url": f"/?run_id={run_id}" if os.path.exists(email_path) else None,
+        })
+    return {"jobs": jobs, "count": len(jobs)}
+
+
 @router.get("/reports")
 async def list_reports():
     """Lists all generated pulse reports with metadata (filename, type, modified date)."""
