@@ -366,9 +366,9 @@ def _render_history_table():
                     st.markdown(f'<a href="/?run_id={run_id}" target="_self" style="text-decoration:underline">{run_id}</a>', unsafe_allow_html=True)
                 else:
                     st.markdown(run_id)
-            with c3: st.caption(badge)
-            with c4: st.caption(date_range_str)
-            with c5: st.caption(triggered_label)
+            with c3: st.markdown(badge)
+            with c4: st.markdown(date_range_str)
+            with c5: st.markdown(triggered_label)
             with c6:
                 if has_file:
                     with open(email_path, 'r', encoding='utf-8') as fp:
