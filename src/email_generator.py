@@ -124,7 +124,7 @@ class EmailGenerator:
 
         <!-- Risk Radar -->
         <div class="section" style="background: #FFF5F5;">
-          <span class="section-title" style="color: #D0021B; border-bottom-color: #D0021B;">⚠ Product Risk Radar</span>
+          <span class="section-title" style="color: #D0021B; border-bottom-color: #D0021B;"><span style="font-size: 18px;">⚠</span> Product Risk Radar</span>
           {risk_radar_html}
         </div>
 
@@ -217,7 +217,6 @@ class EmailGenerator:
             if theme.get('sentiment') == 'Negative' or 'bug' in theme.get('label', '').lower() or 'crash' in theme.get('label', '').lower():
                  risk_items.append(f"""
                  <div class="risk-item">
-                    <span class="risk-icon">⚠</span>
                     <div class="risk-content">
                         <b>{theme.get('label')}</b>: {theme.get('business_impact', 'Potential churn risk')}
                     </div>

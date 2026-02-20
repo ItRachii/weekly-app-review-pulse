@@ -329,7 +329,7 @@ if 'latest_result' in st.session_state:
                     )
                     if success:
                         st.balloons()
-                        st.success(f"Email successfully sent to {target_email}!")
+                        st.success("Email successfully sent!")
                     else:
                         st.error("Failed to send email. Please check your SMTP configuration.")
             elif not target_email:
