@@ -313,16 +313,21 @@ def _render_history_table():
     }
 
     if all_runs:
-        import base64
+        h1, h2, h3, h4, h5, h6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
+        h1.markdown("**S.No.**")
+        h2.markdown("**Run ID**")
+        h3.markdown("**Status**")
+        h4.markdown("**Date Range**")
+        h5.markdown("**Triggered On**")
+        h6.markdown("**Download**")
+        st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
 
-        # ── Build rows ────────────────────────────────────────────────────────
-        rows_html = ""
         for row_idx, run in enumerate(all_runs, start=1):
             run_id  = run["run_id"]
             status  = run.get("status", "succeeded")
             badge   = STATUS_EMOJI.get(status, status)
 
-            # Date range
+            # --- Date range ---
             date_range_str = "-"
             try:
                 if run_id.startswith("custom_"):
@@ -330,19 +335,19 @@ def _render_history_table():
                     if len(parts) >= 3:
                         s = datetime.strptime(parts[1], "%Y%m%d")
                         e = datetime.strptime(parts[2], "%Y%m%d")
-                        date_range_str = f"{s.strftime('%b %d')} – {e.strftime('%b %d %Y')}"
+                        date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
                 elif "-W" in run_id:
                     year, week = run_id.split("-W")
                     week_start = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
-                    date_range_str = f"{week_start.strftime('%b %d')} – {(week_start + timedelta(days=6)).strftime('%b %d %Y')}"
+                    date_range_str = f"{week_start.strftime('%b %d')} - {(week_start + timedelta(days=6)).strftime('%b %d %Y')}"
                 elif run.get("start_date") and run.get("end_date"):
                     s = datetime.fromisoformat(run["start_date"])
                     e = datetime.fromisoformat(run["end_date"])
-                    date_range_str = f"{s.strftime('%b %d')} – {e.strftime('%b %d %Y')}"
+                    date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
             except Exception:
                 pass
 
-            # Triggered-at
+            # --- Triggered-at ---
             triggered_label = "-"
             if run.get("triggered_at"):
                 try:
@@ -350,96 +355,28 @@ def _render_history_table():
                 except Exception:
                     triggered_label = run["triggered_at"][:16]
 
-            # Run ID cell — hyperlink if report file exists
+            # --- Email file ---
             email_path = os.path.join(processed_dir, f"pulse_email_{run_id}.html")
             has_file   = os.path.exists(email_path)
 
-            if has_file:
-                run_id_cell = (
-                    f'<a href="/?run_id={run_id}" target="_self" '
-                    f'style="text-decoration:underline;color:inherit;">{run_id}</a>'
-                )
-            else:
-                run_id_cell = run_id
-
-            # Download cell — inline base64 data URI anchor (same as st.download_button)
-            if has_file:
-                try:
+            c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
+            with c1: st.markdown(f"**{row_idx}**")
+            with c2:
+                if has_file:
+                    st.markdown(f'<a href="/?run_id={run_id}" target="_self" style="text-decoration:underline">{run_id}</a>', unsafe_allow_html=True)
+                else:
+                    st.markdown(run_id)
+            with c3: st.markdown(badge)
+            with c4: st.markdown(date_range_str)
+            with c5: st.markdown(triggered_label)
+            with c6:
+                if has_file:
                     with open(email_path, 'r', encoding='utf-8') as fp:
-                        b64 = base64.b64encode(fp.read().encode()).decode()
-                    download_cell = (
-                        f'<a href="data:text/html;base64,{b64}" '
-                        f'download="pulse_email_{run_id}.html" '
-                        f'title="Download email report" '
-                        f'style="font-size:1.1rem;text-decoration:none;">⬇</a>'
-                    )
-                except Exception:
-                    download_cell = "—"
-            else:
-                download_cell = "—"
-
-            rows_html += f"""
-            <tr>
-                <td>{row_idx}</td>
-                <td>{run_id_cell}</td>
-                <td>{badge}</td>
-                <td>{date_range_str}</td>
-                <td>{triggered_label}</td>
-                <td style="text-align:center;">{download_cell}</td>
-            </tr>
-            <tr><td colspan="6"><hr style="margin:0;padding:0;border:none;border-top:1px solid rgba(128,128,128,0.2);"/></td></tr>
-            """
-
-        # ── Render single fixed-layout table ──────────────────────────────────
-        table_html = f"""
-        <style>
-        .pulse-history-table {{
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: fixed;
-            font-size: 0.9rem;
-        }}
-        .pulse-history-table colgroup col:nth-child(1) {{ width: 5%;  }}
-        .pulse-history-table colgroup col:nth-child(2) {{ width: 32%; }}
-        .pulse-history-table colgroup col:nth-child(3) {{ width: 13%; }}
-        .pulse-history-table colgroup col:nth-child(4) {{ width: 20%; }}
-        .pulse-history-table colgroup col:nth-child(5) {{ width: 22%; }}
-        .pulse-history-table colgroup col:nth-child(6) {{ width: 8%;  }}
-        .pulse-history-table th {{
-            text-align: left;
-            font-weight: 600;
-            padding: 6px 8px 10px 8px;
-            white-space: nowrap;
-        }}
-        .pulse-history-table td {{
-            padding: 10px 8px;
-            vertical-align: middle;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }}
-        </style>
-        <table class="pulse-history-table">
-            <colgroup>
-                <col/><col/><col/><col/><col/><col/>
-            </colgroup>
-            <thead>
-                <tr>
-                    <th>S.No.</th>
-                    <th>Run ID</th>
-                    <th>Status</th>
-                    <th>Date Range</th>
-                    <th>Triggered On</th>
-                    <th style="text-align:center;">Download</th>
-                </tr>
-                <tr><td colspan="6"><hr style="margin:0;padding:0;border:none;border-top:1px solid rgba(128,128,128,0.3);"/></td></tr>
-            </thead>
-            <tbody>
-                {rows_html}
-            </tbody>
-        </table>
-        """
-        st.markdown(table_html, unsafe_allow_html=True)
+                        st.download_button("⬇", fp.read(), file_name=f"pulse_email_{run_id}.html",
+                                           mime="text/html", key=f"dl_html_{run_id}")
+                else:
+                    st.caption("—")
+            st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
     else:
         st.caption("No historical reports found yet. Generate your first pulse report to get started.")
 
