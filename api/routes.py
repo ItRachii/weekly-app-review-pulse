@@ -5,10 +5,13 @@ from typing import Optional
 from src.orchestrator import PulseOrchestrator
 from src.email_service import EmailService
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+import uuid
 import os
 
 router = APIRouter()
 orchestrator = PulseOrchestrator()
+_executor = ThreadPoolExecutor(max_workers=4)
 
 
 class TriggerRequest(BaseModel):
@@ -30,16 +33,19 @@ async def health():
 
 @router.post("/trigger")
 async def trigger_pipeline(payload: TriggerRequest):
-    """Triggers the full scrape-to-report pipeline synchronously and returns results."""
-    kwargs = {"force": payload.force}
+    """Accepts the trigger, schedules pipeline in a background thread, returns run_id immediately."""
+    run_id = f"run_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
+    kwargs: dict = {"force": payload.force, "run_id": run_id}
     if payload.start_date:
         kwargs["start_date"] = datetime.fromisoformat(payload.start_date)
     if payload.end_date:
         kwargs["end_date"] = datetime.fromisoformat(payload.end_date)
 
-    result = orchestrator.run_pipeline(**kwargs)
-    return result
+    # Fire-and-forget: submit to thread pool, return immediately
+    _executor.submit(orchestrator.run_pipeline, **kwargs)
+
+    return {"status": "triggered", "run_id": run_id}
 
 
 @router.post("/upload")
@@ -49,6 +55,22 @@ async def upload_reviews(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Invalid file type. Only CSV and JSON allowed.")
 
     return {"filename": file.filename, "status": "received", "detail": "Manual upload processing not yet implemented."}
+
+
+@router.get("/runs")
+async def list_runs(limit: int = 20):
+    """Returns all pipeline runs (any status), newest first. Used by the dashboard."""
+    runs = orchestrator.data_manager.list_run_history(limit=limit)
+    return {"runs": runs, "count": len(runs)}
+
+
+@router.get("/runs/{run_id}")
+async def get_run(run_id: str):
+    """Returns the current state of a single pipeline run."""
+    row = orchestrator.data_manager.get_run_log(run_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return row
 
 
 @router.get("/reports")

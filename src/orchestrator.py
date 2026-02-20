@@ -98,8 +98,21 @@ class PulseOrchestrator:
             logger.info(msg)
             return {"status": "skipped", "reason": msg}
 
+        # ── Write the row IMMEDIATELY so the dashboard can see it ──────────────
+        self.data_manager.upsert_run_log({
+            "run_id":         run_id,
+            "status":         "triggered",
+            "trigger_source": "manual",
+            "start_date":     current_start.date().isoformat(),
+            "end_date":       current_end.date().isoformat(),
+            "triggered_at":   datetime.now().isoformat(),
+        })
+
         try:
-            # 1. Incremental Scrape & Clean
+            # ── Transition to running ──────────────────────────────────────────
+            self.data_manager.update_run_status(
+                run_id, "running", started_at=datetime.now().isoformat()
+            )
 
             # 1. Incremental Scrape & Clean
             logger.info(f"Stage 1/4: Intelligent Scraping ({current_start.date()} to {current_end.date()})...")
@@ -189,14 +202,13 @@ class PulseOrchestrator:
             with open(email_path, 'w', encoding='utf-8') as f:
                 f.write(email_html)
 
-            # Persist run log
-            self.data_manager.save_run_log({
-                "run_id": run_id,
-                "start_date": start_date.date().isoformat(),
-                "end_date": end_date.date().isoformat(),
-                "reviews_processed": total_reviews,
-                "themes_identified": len(themes)
-            })
+            # Persist run log — transition to succeeded
+            self.data_manager.update_run_status(
+                run_id, "succeeded",
+                completed_at=datetime.now().isoformat(),
+                reviews_processed=total_reviews,
+                themes_identified=len(themes),
+            )
 
             # 5. Finalize
             if not is_custom_run:
@@ -221,6 +233,12 @@ class PulseOrchestrator:
             stage = getattr(e, 'stage', 'Unknown')
             error_msg = f"Pipeline failed at stage [{stage}]: {str(e)}"
             logger.error(error_msg)
+            # ── Transition to failed — always persisted ────────────────────────
+            self.data_manager.update_run_status(
+                run_id, "failed",
+                completed_at=datetime.now().isoformat(),
+                error_message=error_msg,
+            )
             return {"status": "failed", "error": error_msg, "stage": stage}
 
     def purge_all_data(self):

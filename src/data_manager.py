@@ -41,13 +41,41 @@ class DataManager:
             """)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS run_history (
-                    run_id TEXT PRIMARY KEY,
-                    start_date TEXT,
-                    end_date TEXT,
+                    run_id           TEXT PRIMARY KEY,
+                    status           TEXT NOT NULL DEFAULT 'triggered',
+                    trigger_source   TEXT NOT NULL DEFAULT 'manual',
+                    triggered_by     TEXT,
+                    start_date       TEXT,
+                    end_date         TEXT,
+                    triggered_at     TEXT,
+                    started_at       TEXT,
+                    completed_at     TEXT,
                     reviews_processed INTEGER,
                     themes_identified INTEGER,
-                    created_at TEXT
+                    error_message    TEXT
                 )
+            """)
+            # Migrate existing rows: add missing columns if upgrading from old schema
+            existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(run_history)").fetchall()}
+            migrations = [
+                ("status",            "TEXT NOT NULL DEFAULT 'succeeded'"),
+                ("trigger_source",    "TEXT NOT NULL DEFAULT 'manual'"),
+                ("triggered_by",      "TEXT"),
+                ("triggered_at",      "TEXT"),
+                ("started_at",        "TEXT"),
+                ("completed_at",      "TEXT"),
+                ("error_message",     "TEXT"),
+            ]
+            for col, col_def in migrations:
+                if col not in existing_cols:
+                    conn.execute(f"ALTER TABLE run_history ADD COLUMN {col} {col_def}")
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_run_history_triggered
+                ON run_history (triggered_at DESC)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_run_history_status
+                ON run_history (status)
             """)
             conn.commit()
 
@@ -156,25 +184,75 @@ class DataManager:
         self._init_db()
         logger.info("Database reset successfully.")
 
-    def save_run_log(self, run_data: Dict[str, Any]):
-        """Saves execution run metadata."""
+    def upsert_run_log(self, run_data: Dict[str, Any]):
+        """Insert-or-replace a run row. Called immediately at trigger time."""
         try:
             with sqlite3.connect(self.DB_PATH) as conn:
                 conn.execute("""
-                    INSERT OR REPLACE INTO run_history (run_id, start_date, end_date, reviews_processed, themes_identified, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO run_history
+                        (run_id, status, trigger_source, triggered_by,
+                         start_date, end_date, triggered_at,
+                         started_at, completed_at,
+                         reviews_processed, themes_identified, error_message)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     run_data['run_id'],
-                    run_data['start_date'],
-                    run_data['end_date'],
-                    run_data['reviews_processed'],
-                    run_data['themes_identified'],
-                    datetime.now().isoformat()
+                    run_data.get('status', 'triggered'),
+                    run_data.get('trigger_source', 'manual'),
+                    run_data.get('triggered_by'),
+                    run_data.get('start_date'),
+                    run_data.get('end_date'),
+                    run_data.get('triggered_at', datetime.now().isoformat()),
+                    run_data.get('started_at'),
+                    run_data.get('completed_at'),
+                    run_data.get('reviews_processed'),
+                    run_data.get('themes_identified'),
+                    run_data.get('error_message'),
                 ))
                 conn.commit()
-            logger.info(f"Saved run log for {run_data['run_id']}")
+            logger.info(f"Upserted run log for {run_data['run_id']} (status={run_data.get('status', 'triggered')})")
         except Exception as e:
-            logger.error(f"Failed to save run log: {e}")
+            logger.error(f"Failed to upsert run log: {e}")
+
+    # Keep old name as an alias so any existing callers don't break
+    def save_run_log(self, run_data: Dict[str, Any]):
+        """Alias for upsert_run_log (backwards-compat)."""
+        self.upsert_run_log(run_data)
+
+    def update_run_status(self, run_id: str, status: str, **kwargs):
+        """Patch status and optional timestamp / count fields on an existing row."""
+        allowed = {"started_at", "completed_at", "reviews_processed",
+                   "themes_identified", "error_message"}
+        fields: Dict[str, Any] = {k: v for k, v in kwargs.items() if k in allowed}
+        fields["status"] = status
+
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        values = list(fields.values()) + [run_id]
+
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                conn.execute(
+                    f"UPDATE run_history SET {set_clause} WHERE run_id = ?", values
+                )
+                conn.commit()
+            logger.info(f"Updated run {run_id} → status={status}")
+        except Exception as e:
+            logger.error(f"Failed to update run status for {run_id}: {e}")
+
+    def list_run_history(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Returns all runs (any status), newest-first. Used by the dashboard."""
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute("""
+                    SELECT * FROM run_history
+                    ORDER BY triggered_at DESC
+                    LIMIT ?
+                """, (limit,))
+                return [dict(r) for r in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to list run history: {e}")
+            return []
 
     def get_run_log(self, run_id: str) -> Dict[str, Any]:
         """Retrieves metadata for a specific run."""

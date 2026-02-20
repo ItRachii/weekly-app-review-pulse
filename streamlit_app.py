@@ -215,14 +215,6 @@ with st.sidebar:
             st.session_state['pipeline_future'] = future
             st.session_state['pipeline_run_id'] = custom_run_id
             st.session_state['pipeline_status'] = 'running'
-            # Record in pending so history shows it immediately
-            st.session_state.setdefault('pipeline_pending', {})[custom_run_id] = {
-                'run_id': custom_run_id,
-                'start_date': start_date.strftime('%Y%m%d'),
-                'end_date': end_date.strftime('%Y%m%d'),
-                'triggered_at': datetime.now().strftime('%b %d, %Y %I:%M %p'),
-                'date_range_str': f"{start_date.strftime('%b %d')} - {end_date.strftime('%b %d %Y')}",
-            }
             
             st.toast(f"Pipeline triggered: {custom_run_id}", icon="🚀")
             time.sleep(1) # Brief pause to let toast show
@@ -348,120 +340,101 @@ if 'latest_result' in st.session_state:
 else:
     st.info("Select a date range and click 'Generate Pulse Report' to get started.")
 
-    # --- Report History ---
+    # --- Report History (DB-driven, shows all statuses) ---
     st.subheader("📂 Report History")
     processed_dir = "data/processed"
-    if os.path.exists(processed_dir):
-        md_files = sorted(
-            [f for f in os.listdir(processed_dir) if f.endswith('.md')],
-            key=lambda f: os.path.getmtime(os.path.join(processed_dir, f)),
-            reverse=True
-        )
-        html_files = sorted(
-            [f for f in os.listdir(processed_dir) if f.endswith('.html')],
-            key=lambda f: os.path.getmtime(os.path.join(processed_dir, f)),
-            reverse=True
-        )
 
-        if 'pipeline_pending' in st.session_state or html_files:
-            # Use columns for a table-like header
-            h1, h2, h3, h4, h5, h6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
-            h1.markdown("**S.No.**")
-            h2.markdown("**Run ID**")
-            h3.markdown("**Status**")
-            h4.markdown("**Date Range**")
-            h5.markdown("**Generated On**")
-            h6.markdown("**Download**")
-            st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
+    # Fetch all runs from DB — no status filter
+    all_runs = orchestrator.data_manager.list_run_history(limit=30)
 
-            row_idx = 1
+    # Auto-rerun every 5 s while any job is in-flight
+    in_progress = any(r.get("status") in ("triggered", "running") for r in all_runs)
+    if in_progress:
+        st.info("⏳ Pipeline is running — auto-refreshing every 5 s…")
+        time.sleep(5)
+        st.rerun()
 
-            # --- Show in-flight (pending) runs first ---
-            active_run_id = st.session_state.get('pipeline_run_id')
-            pending = st.session_state.get('pipeline_pending', {})
-            for pid, pinfo in pending.items():
-                # Determine live status
-                if pid == active_run_id and 'pipeline_future' in st.session_state:
-                    status_badge = "🟡 Running"
-                elif st.session_state.get('pipeline_status') == 'failed' and pid == active_run_id:
-                    status_badge = "🔴 Failed"
-                else:
-                    # Already completed — skip (will appear in html_files below)
-                    continue
+    STATUS_EMOJI = {
+        "triggered": "🟡 Triggered",
+        "running":   "🔵 Running",
+        "succeeded": "🟢 Succeeded",
+        "failed":    "🔴 Failed",
+    }
 
-                c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
-                with c1: st.markdown(f"**{row_idx}**")
-                with c2: st.markdown(f"{pinfo['run_id']}")
-                with c3: st.caption(status_badge)
-                with c4: st.caption(pinfo['date_range_str'])
-                with c5: st.caption(pinfo['triggered_at'])
-                with c6: st.caption("—")
-                st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
-                row_idx += 1
+    if all_runs:
+        h1, h2, h3, h4, h5, h6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
+        h1.markdown("**S.No.**")
+        h2.markdown("**Run ID**")
+        h3.markdown("**Status**")
+        h4.markdown("**Date Range**")
+        h5.markdown("**Triggered On**")
+        h6.markdown("**Download**")
+        st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
 
-            # --- Show completed runs from filesystem ---
-            for f in html_files:
-                fpath = os.path.join(processed_dir, f)
-                mod_time = datetime.fromtimestamp(os.path.getmtime(fpath))
-                date_label = mod_time.strftime("%b %d, %Y %I:%M %p")
-                
-                # Parse run_id and date range
-                run_id = f.replace("pulse_email_", "").replace(".html", "")
-                date_range_str = "-"
+        for row_idx, run in enumerate(all_runs, start=1):
+            run_id    = run["run_id"]
+            status    = run.get("status", "succeeded")
+            badge     = STATUS_EMOJI.get(status, status)
+
+            # --- Date range label ---
+            date_range_str = "-"
+            try:
+                if run_id.startswith("custom_"):
+                    parts = run_id.split('_')
+                    if len(parts) >= 3:
+                        s = datetime.strptime(parts[1], "%Y%m%d")
+                        e = datetime.strptime(parts[2], "%Y%m%d")
+                        date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
+                elif "-W" in run_id:
+                    year, week = run_id.split("-W")
+                    week_start = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
+                    date_range_str = f"{week_start.strftime('%b %d')} - {(week_start + timedelta(days=6)).strftime('%b %d %Y')}"
+                elif run.get("start_date") and run.get("end_date"):
+                    s = datetime.fromisoformat(run["start_date"])
+                    e = datetime.fromisoformat(run["end_date"])
+                    date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
+            except Exception:
+                pass
+
+            # --- Triggered-at label ---
+            triggered_label = "-"
+            if run.get("triggered_at"):
                 try:
-                    if run_id.startswith("custom_"):
-                        parts = run_id.split('_')
-                        if len(parts) >= 3:
-                            s = datetime.strptime(parts[1], "%Y%m%d")
-                            e = datetime.strptime(parts[2], "%Y%m%d")
-                            date_range_str = f"{s.strftime('%b %d')} - {e.strftime('%b %d %Y')}"
-                    elif "-W" in run_id:
-                        year, week = run_id.split("-W")
-                        start = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
-                        end = start + timedelta(days=6)
-                        date_range_str = f"{start.strftime('%b %d')} - {end.strftime('%b %d %Y')}"
+                    triggered_label = datetime.fromisoformat(run["triggered_at"]).strftime("%b %d, %Y %I:%M %p")
                 except Exception:
-                    pass
+                    triggered_label = run["triggered_at"][:16]
 
-                # Determine pipeline status for this run
-                pipeline_status_for_run = st.session_state.get('pipeline_status')
-                if active_run_id == run_id and pipeline_status_for_run == 'failed':
-                    status_badge = "🔴 Failed"
-                else:
-                    status_badge = "🟢 Succeeded"
+            # --- Email file path (only for succeeded) ---
+            email_path = os.path.join(processed_dir, f"pulse_email_{run_id}.html")
+            has_file   = os.path.exists(email_path)
 
-                # Remove from pending once file exists
-                if run_id in st.session_state.get('pipeline_pending', {}):
-                    del st.session_state['pipeline_pending'][run_id]
-
-                c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
-                with c1:
-                    st.markdown(f"**{row_idx}**")
-                with c2:
+            c1, c2, c3, c4, c5, c6 = st.columns([1, 4, 2, 3, 2, 2], vertical_alignment="center")
+            with c1:
+                st.markdown(f"**{row_idx}**")
+            with c2:
+                if has_file:
                     st.markdown(f'<a href="/?run_id={run_id}" target="_self" style="text-decoration: underline;">{run_id}</a>', unsafe_allow_html=True)
-                with c3:
-                    st.caption(status_badge)
-                with c4:
-                    st.caption(date_range_str)
-                with c5:
-                    st.caption(date_label)
-                with c6:
-                    with open(fpath, 'r', encoding='utf-8') as fp:
-                        st.download_button("⬇", fp.read(), file_name=f, mime="text/html", key=f"dl_html_{f}")
-                st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
-                row_idx += 1
-        else:
-            st.caption("No historical reports found yet. Generate your first pulse report to get started.")
+                else:
+                    st.markdown(run_id)
+            with c3:
+                st.caption(badge)
+            with c4:
+                st.caption(date_range_str)
+            with c5:
+                st.caption(triggered_label)
+            with c6:
+                if has_file:
+                    with open(email_path, 'r', encoding='utf-8') as fp:
+                        st.download_button("⬇", fp.read(), file_name=f"pulse_email_{run_id}.html",
+                                           mime="text/html", key=f"dl_html_{run_id}")
+                else:
+                    st.caption("—")
+            st.markdown("<hr style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
     else:
         st.caption("No historical reports found yet. Generate your first pulse report to get started.")
 
-# --- Auto-refresh while pipeline is running (JS-based, non-blocking) ---
+# --- Polling: re-run every 5 s while pipeline is in-flight (session fallback) ---
+# The history section already handles this via DB, but this covers the detail view page too.
 if 'pipeline_future' in st.session_state and not st.session_state['pipeline_future'].done():
-    components.html("""
-        <script>
-        // Reload the parent Streamlit app after 30 seconds
-        setTimeout(function() {
-            window.parent.location.reload();
-        }, 30000);
-        </script>
-    """, height=0)
+    time.sleep(5)
+    st.rerun()
