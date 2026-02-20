@@ -163,10 +163,17 @@ with title_col:
 if 'pipeline_future' in st.session_state:
     future = st.session_state['pipeline_future']
     if future.done():
+        # Clear future FIRST — prevents re-entry on subsequent reruns caused by polling
+        del st.session_state['pipeline_future']
         try:
             result = future.result()
             if result["status"] == "success":
-                st.toast(f"✅ Pipeline Succeeded! Reviews: {result['reviews_count']}", icon="✅")
+                # Idempotency guard: only toast once per run_id
+                active_id  = st.session_state.get('pipeline_run_id')
+                toasted_id = st.session_state.get('_toasted_run_id')
+                if active_id and toasted_id != active_id:
+                    st.toast(f"✅ Pipeline Succeeded! Reviews: {result['reviews_count']}", icon="✅")
+                    st.session_state['_toasted_run_id'] = active_id
                 st.session_state['latest_result'] = result
                 st.session_state['pipeline_status'] = 'succeeded'
             else:
@@ -177,11 +184,6 @@ if 'pipeline_future' in st.session_state:
         except Exception as e:
             st.session_state['pipeline_status'] = 'failed'
             st.session_state['pipeline_error'] = str(e)
-        # Clear future — polling complete
-        del st.session_state['pipeline_future']
-    else:
-        # Still running — page renders fully, JS auto-refresh at bottom handles polling
-        pass
 
 # --- Sidebar ---
 with st.sidebar:
@@ -347,12 +349,13 @@ else:
     # Fetch all runs from DB — no status filter
     all_runs = orchestrator.data_manager.list_run_history(limit=30)
 
-    # Auto-rerun every 5 s while any job is in-flight
+    # Silent poll: inject a JS reload every 5 s while any job is in-flight (non-blocking)
     in_progress = any(r.get("status") in ("triggered", "running") for r in all_runs)
     if in_progress:
-        st.info("⏳ Pipeline is running — auto-refreshing every 5 s…")
-        time.sleep(5)
-        st.rerun()
+        components.html(
+            "<script>setTimeout(()=>window.parent.location.reload(),5000);</script>",
+            height=0,
+        )
 
     STATUS_EMOJI = {
         "triggered": "🟡 Triggered",
@@ -433,8 +436,3 @@ else:
     else:
         st.caption("No historical reports found yet. Generate your first pulse report to get started.")
 
-# --- Polling: re-run every 5 s while pipeline is in-flight (session fallback) ---
-# The history section already handles this via DB, but this covers the detail view page too.
-if 'pipeline_future' in st.session_state and not st.session_state['pipeline_future'].done():
-    time.sleep(5)
-    st.rerun()
