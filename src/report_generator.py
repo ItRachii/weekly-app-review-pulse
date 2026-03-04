@@ -12,13 +12,13 @@ class PulseReportGenerator:
     Generates a concise executive pulse note (≤250 words) from theme analysis.
     """
     
-    SYSTEM_PROMPT = """You are the Chief of Staff at GROWW. Your audience is the executive leadership team. 
+    SYSTEM_PROMPT = """You are the Chief of Staff. Your audience is the executive leadership team. 
     Summarize the weekly app review themes into a highly scannable, high-impact pulse note."""
 
     REPORT_PROMPT = """
     Summarize the following app review themes into an executive pulse note.
 
-    Title: GROWW Weekly Review Pulse – Week of {current_date}
+    Title: Weekly Review Pulse – Week of {current_date}
 
     Top Themes:
     1. [Theme Label]: [1-sentence summary emphasizing volume/impact]

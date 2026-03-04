@@ -8,7 +8,7 @@ from utils.logger import setup_logger
 from datetime import datetime
 
 logger = setup_logger("api_server")
-app = FastAPI(title="GROWW Pulse Report API", version="1.0.0")
+app = FastAPI(title="Pulse Report API", version="1.0.0")
 
 # Include routes
 app.include_router(router, prefix="/api/v1")

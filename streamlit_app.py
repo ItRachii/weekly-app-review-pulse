@@ -11,18 +11,17 @@ import concurrent.futures
 import time
 
 # --- App Config ---
-groww_icon = Image.open("assets/groww_logo.png")
-st.set_page_config(page_title="Groww Pulse Report", page_icon=groww_icon, layout="wide")
+st.set_page_config(page_title="Weekly App Review Pulse", layout="wide")
 
-# --- Groww Brand Theme CSS ---
+# --- Brand Theme CSS ---
 st.markdown("""
 <style>
-    /* ===== Groww Brand Colors =====
-       Groww Blue:            #5367F5
-       Groww Green (Logo):    #08F6B6
-       Groww Green (Primary): #00D09C
-       Groww Accent Blue A:   #B1D0FB
-       Groww Accent Blue B:   #E5F4FD
+    /* ===== Brand Colors =====
+       Brand Blue:            #5367F5
+       Brand Green (Logo):    #08F6B6
+       Brand Green (Primary): #00D09C
+       Brand Accent Blue A:   #B1D0FB
+       Brand Accent Blue B:   #E5F4FD
     */
 
     /* Primary buttons */
@@ -153,15 +152,8 @@ if "run_id" in query_params:
             }
 
 # --- Page Header ---
-logo_col, title_col = st.columns([0.08, 0.92], vertical_alignment="center")
-with logo_col:
-    import base64
-    with open("assets/groww_logo.png", "rb") as img_file:
-        logo_b64 = base64.b64encode(img_file.read()).decode()
-    st.markdown(f'<img src="data:image/png;base64,{logo_b64}" width="80">', unsafe_allow_html=True)
-with title_col:
-    st.title("Groww - Weekly App Review Pulse")
-    st.markdown("Automated sentiment analysis and executive reporting for app store reviews.")
+st.title("Weekly App Review Pulse")
+st.markdown("Automated sentiment analysis and executive reporting for app store reviews.")
 
 # --- Async Pipeline Status Check (placed AFTER header to avoid displacing title) ---
 if 'pipeline_future' in st.session_state:
@@ -432,7 +424,7 @@ if 'latest_result' in st.session_state:
                 with st.spinner("Sending email..."):
                     success = EmailService.send_email(
                         to_email=target_email,
-                        subject=f"[GROWW] Weekly App Review Pulse - {datetime.now().strftime('%B %d, %Y')}",
+                        subject=f"Weekly App Review Pulse - {datetime.now().strftime('%B %d, %Y')}",
                         html_content=html_content
                     )
                     if success:

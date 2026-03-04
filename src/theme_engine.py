@@ -49,7 +49,7 @@ class ThemeClusteringEngine:
     """
     
     CLUSTERING_PROMPT = """
-    You are a Senior Product Manager. Your task is to analyze a list of user reviews for the GROWW app and group them into at most 5 semantic themes.
+    You are a Senior Product Manager. Your task is to analyze a list of user reviews for the given mobile app and group them into at most 5 semantic themes.
     For each theme, you must also select 3 high-signal quotes and propose 3 specific action ideas.
 
     ### Rules:

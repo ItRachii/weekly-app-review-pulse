@@ -191,7 +191,7 @@ async def send_email_report(payload: SendEmailRequest):
     with open(report_path, 'r', encoding='utf-8') as f:
         html_content = f.read()
 
-    subject = payload.subject or f"[GROWW] Weekly App Review Pulse - {datetime.now().strftime('%B %d, %Y')}"
+    subject = payload.subject or f"Weekly App Review Pulse - {datetime.now().strftime('%B %d, %Y')}"
 
     success = EmailService.send_email(
         to_email=payload.to_email,
