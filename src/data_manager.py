@@ -61,12 +61,8 @@ class DataManager:
                 CREATE TABLE IF NOT EXISTS applications (
                     app_name           TEXT PRIMARY KEY,
                     playstore_id       TEXT,
-<<<<<<< HEAD
                     appstore_id        TEXT,
                     regions            TEXT DEFAULT 'in'
-=======
-                    appstore_id        TEXT
->>>>>>> cfa17394008e0805c1c38df84f999d6c423ea70c
                 )
             """)
 

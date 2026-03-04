@@ -171,7 +171,6 @@ if __name__ == "__main__":
 
     se = ScraperEngine(weeks_back=52)
 
-<<<<<<< HEAD
     regions_str = app.get("regions")
     if not regions_str:
         regions_str = "in"
@@ -185,10 +184,6 @@ if __name__ == "__main__":
             ios.extend(se.scrape_app_store(appstore_id, country=r))
         if playstore_id:
             android.extend(se.scrape_play_store(playstore_id, count=100, country=r))
-=======
-    ios = se.scrape_app_store(appstore_id) if appstore_id else []
-    android = se.scrape_play_store(playstore_id) if playstore_id else []
->>>>>>> cfa17394008e0805c1c38df84f999d6c423ea70c
 
     print(f"Total reviews: {len(ios) + len(android)}")
     # Save combined
