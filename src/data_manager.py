@@ -34,9 +34,11 @@ class DataManager:
             """)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS scrape_history (
-                    platform TEXT,
-                    scrape_date TEXT,
-                    PRIMARY KEY (platform, scrape_date)
+                    id           TEXT PRIMARY KEY,
+                    platform     TEXT,
+                    scrape_date  TEXT,
+                    country      TEXT,
+                    records_count INTEGER
                 )
             """)
             conn.execute("""
@@ -55,6 +57,15 @@ class DataManager:
                     error_message    TEXT
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS applications (
+                    app_name           TEXT PRIMARY KEY,
+                    playstore_id       TEXT,
+                    appstore_id        TEXT,
+                    regions            TEXT DEFAULT 'in'
+                )
+            """)
+
             # Migrate existing rows: add missing columns if upgrading from old schema
             existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(run_history)").fetchall()}
             migrations = [
@@ -69,6 +80,32 @@ class DataManager:
             for col, col_def in migrations:
                 if col not in existing_cols:
                     conn.execute(f"ALTER TABLE run_history ADD COLUMN {col} {col_def}")
+                    
+            existing_app_cols = {row[1] for row in conn.execute("PRAGMA table_info(applications)").fetchall()}
+            if "regions" not in existing_app_cols:
+                conn.execute("ALTER TABLE applications ADD COLUMN regions TEXT DEFAULT 'in'")
+
+            existing_scrape = {row[1] for row in conn.execute("PRAGMA table_info(scrape_history)")}
+            if "id" not in existing_scrape:
+                import uuid
+                conn.execute("ALTER TABLE scrape_history RENAME TO scrape_history_old")
+                conn.execute("""
+                    CREATE TABLE scrape_history (
+                        id           TEXT PRIMARY KEY,
+                        platform     TEXT,
+                        scrape_date  TEXT,
+                        country      TEXT,
+                        records_count INTEGER
+                    )
+                """)
+                old_rows = conn.execute("SELECT platform, scrape_date FROM scrape_history_old").fetchall()
+                for p, d in old_rows:
+                    conn.execute(
+                        "INSERT INTO scrape_history (id, platform, scrape_date, country, records_count) VALUES (?, ?, ?, ?, ?)",
+                        (uuid.uuid4().hex, p, d, 'in', 0)
+                    )
+                conn.execute("DROP TABLE scrape_history_old")
+
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_run_history_triggered
                 ON run_history (triggered_at DESC)
@@ -166,13 +203,34 @@ class DataManager:
             cursor = conn.execute("SELECT 1 FROM scrape_history WHERE platform = ? LIMIT 1", (platform,))
             return cursor.fetchone() is not None
 
-    def mark_scraped(self, platform: str, start_date: datetime, end_date: datetime):
-        """Marks a range as successfully scraped."""
+    def mark_scraped(self, platform: str, start_date: datetime, end_date: datetime, country: str = 'in', new_reviews: List[Dict[str, Any]] = None):
+        """Marks a range as successfully scraped, recording country and daily records count."""
+        import uuid
+        from collections import Counter
+        
+        if new_reviews is None:
+            new_reviews = []
+            
+        daily_counts = Counter()
+        for r in new_reviews:
+            d = r.get('date')
+            if isinstance(d, str):
+                try:
+                    d = datetime.fromisoformat(d)
+                except ValueError:
+                    continue
+            if hasattr(d, 'date'):
+                daily_counts[d.date().isoformat()] += 1
+
         days = (end_date - start_date).days + 1
         with sqlite3.connect(self.DB_PATH) as conn:
             for i in range(days):
                 day = (start_date + timedelta(days=i)).date().isoformat()
-                conn.execute("INSERT OR IGNORE INTO scrape_history (platform, scrape_date) VALUES (?, ?)", (platform, day))
+                count = daily_counts.get(day, 0)
+                conn.execute(
+                    "INSERT INTO scrape_history (id, platform, scrape_date, country, records_count) VALUES (?, ?, ?, ?, ?)", 
+                    (uuid.uuid4().hex, platform, day, country, count)
+                )
             conn.commit()
 
     def purge_data(self) -> None:
@@ -299,4 +357,31 @@ class DataManager:
                 return dict(row) if row else {}
         except Exception as e:
             logger.error(f"Failed to get run log: {e}")
+            return {}
+
+    # ── Application registry helpers ──────────────────────────────────────────
+
+    def get_all_applications(self) -> List[Dict[str, str]]:
+        """Returns every tracked application as a list of dicts."""
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute("SELECT * FROM applications ORDER BY app_name")
+                return [dict(r) for r in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to list applications: {e}")
+            return []
+
+    def get_application(self, app_name: str) -> Dict[str, str]:
+        """Returns a single application row by name, or empty dict."""
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    "SELECT * FROM applications WHERE app_name = ?", (app_name,)
+                )
+                row = cursor.fetchone()
+                return dict(row) if row else {}
+        except Exception as e:
+            logger.error(f"Failed to get application '{app_name}': {e}")
             return {}

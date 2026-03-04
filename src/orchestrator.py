@@ -67,13 +67,14 @@ class PulseOrchestrator:
             with open(self.MANIFEST_FILE, 'w') as f:
                 json.dump(manifest, f, indent=2)
 
-    def run_pipeline(self, force: bool = False, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
+    def run_pipeline(self, force: bool = False, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, run_id: Optional[str] = None, app_name: Optional[str] = None) -> Dict[str, Any]:
         """
         Executes the full pipeline.
         :param force: If True, bypasses idempotency check.
         :param start_date: Optional start date for scraping.
         :param end_date: Optional end date for scraping.
         :param run_id: Optional pre-generated run_id for tracking.
+        :param app_name: Optional application name to look up store IDs from the DB.
         """
         # 0. Handle Date Defaults
         current_end = end_date or datetime.now()
@@ -117,11 +118,44 @@ class PulseOrchestrator:
             # 1. Incremental Scrape & Clean
             logger.info(f"Stage 1/4: Intelligent Scraping ({current_start.date()} to {current_end.date()})...")
             
-            platforms = [
-                {"name": "ios", "id": "1404871703"},
-                {"name": "android", "id": "com.groww"}
-            ]
+            # Build platform list from the applications table
+            # Use a fresh DataManager to avoid stale @st.cache_resource issues
+            from src.data_manager import DataManager
+            _app_dm = DataManager()
+            app = None
+            if app_name:
+                app = _app_dm.get_application(app_name)
+                logger.info(f"Looked up application '{app_name}': {app}")
+            if not app:
+                # Fallback: pick the first registered app
+                apps = _app_dm.get_all_applications()
+                app = apps[0] if apps else None
+
+            if not app:
+                raise PulsePipelineError(
+                    "No applications registered in the database. "
+                    "Please add at least one application before running the pipeline.",
+                    "Scraping"
+                )
+
+            logger.info(f"Using application: {app['app_name']} | Play Store: {app.get('playstore_id')} | App Store: {app.get('appstore_id')}")
+            platforms = []
+            if app.get("appstore_id"):
+                platforms.append({"name": "ios", "id": app["appstore_id"]})
+            if app.get("playstore_id"):
+                platforms.append({"name": "android", "id": app["playstore_id"]})
+
+            if not platforms:
+                raise PulsePipelineError(
+                    f"Application '{app['app_name']}' has no Play Store or App Store ID configured.",
+                    "Scraping"
+                )
             
+            regions_str = app.get("regions")
+            if not regions_str:
+                regions_str = "in"
+            regions = [r.strip().lower() for r in str(regions_str).split(',') if r.strip()]
+
             for platform in platforms:
                 missing_ranges = self.data_manager.get_missing_ranges(current_start, current_end, platform["name"])
                 
@@ -138,22 +172,25 @@ class PulseOrchestrator:
                 for m_start, m_end in missing_ranges:
                     logger.info(f"Scraping {platform['name']} for missing range: {m_start.date()} to {m_end.date()}")
                     scraper = ScraperEngine(start_date=m_start, end_date=m_end)
+                    new_reviews = []
                     
-                    if platform["name"] == "ios":
-                        new_reviews = scraper.scrape_app_store(app_id=platform["id"])
-                    else:
-                        # Increased count to 500 for better date range coverage on popular apps
-                        new_reviews = scraper.scrape_play_store(package_name=platform["id"], count=500)
+                    for r in regions:
+                        logger.info(f"Scraping region '{r}' for {platform['name']}")
+                        regional_reviews = []
+                        if platform["name"] == "ios":
+                            regional_reviews.extend(scraper.scrape_app_store(app_id=platform["id"], country=r))
+                        else:
+                            # Increased count to 500 for better date range coverage on popular apps
+                            regional_reviews.extend(scraper.scrape_play_store(package_name=platform["id"], count=500, country=r))
+                        
+                        self.data_manager.mark_scraped(platform["name"], m_start, m_end, country=r, new_reviews=regional_reviews)
+                        new_reviews.extend(regional_reviews)
                     
                     if new_reviews:
                         saved = self.data_manager.save_reviews(new_reviews)
                         logger.info(f"Saved {saved}/{len(new_reviews)} new reviews for {platform['name']}")
                     else:
                         logger.info(f"No new reviews found for {platform['name']} in this sub-range.")
-                    
-                    # Mark as scraped regardless of finding reviews, so we don't infinitely retry empty days.
-                    # But we trust DataManager.save_reviews wouldn't crash.
-                    self.data_manager.mark_scraped(platform["name"], m_start, m_end)
 
             # 2. Fetch all reviews (Cached + Just Scraped) for the requested range
             all_reviews = self.data_manager.get_cached_reviews(current_start, current_end)

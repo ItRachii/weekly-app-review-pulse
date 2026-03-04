@@ -18,6 +18,7 @@ every Streamlit script rerun.
 import sqlite3
 import logging
 import os
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +87,11 @@ def _create_schema(db_path: str) -> None:
         # ── Incremental scrape coverage tracker ───────────────────────────────
         conn.execute("""
             CREATE TABLE IF NOT EXISTS scrape_history (
+                id           TEXT PRIMARY KEY,
                 platform     TEXT,
                 scrape_date  TEXT,
-                PRIMARY KEY (platform, scrape_date)
+                country      TEXT,
+                records_count INTEGER
             )
         """)
 
@@ -107,6 +110,16 @@ def _create_schema(db_path: str) -> None:
                 reviews_processed  INTEGER,
                 themes_identified  INTEGER,
                 error_message      TEXT
+            )
+        """)
+
+        # ── Tracked applications table ────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS applications (
+                app_name           TEXT PRIMARY KEY,
+                playstore_id       TEXT,
+                appstore_id        TEXT,
+                regions            TEXT DEFAULT 'in'
             )
         """)
 
@@ -132,8 +145,8 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
     databases created by older versions of the app.
     Only adds; never drops or renames existing columns.
     """
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(run_history)")}
-    pending = [
+    existing_run_history = {row[1] for row in conn.execute("PRAGMA table_info(run_history)")}
+    pending_run_history = [
         ("status",           "TEXT NOT NULL DEFAULT 'succeeded'"),
         ("trigger_source",   "TEXT NOT NULL DEFAULT 'manual'"),
         ("triggered_by",     "TEXT"),
@@ -142,7 +155,33 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         ("completed_at",     "TEXT"),
         ("error_message",    "TEXT"),
     ]
-    for col, col_def in pending:
-        if col not in existing:
+    for col, col_def in pending_run_history:
+        if col not in existing_run_history:
             conn.execute(f"ALTER TABLE run_history ADD COLUMN {col} {col_def}")
             logger.info(f"Migration applied: added column run_history.{col}")
+
+    existing_applications = {row[1] for row in conn.execute("PRAGMA table_info(applications)")}
+    if "regions" not in existing_applications:
+        conn.execute("ALTER TABLE applications ADD COLUMN regions TEXT DEFAULT 'in'")
+        logger.info("Migration applied: added column applications.regions")
+
+    existing_scrape = {row[1] for row in conn.execute("PRAGMA table_info(scrape_history)")}
+    if "id" not in existing_scrape:
+        logger.info("Migration applied: Recreating scrape_history to include id, country, and records_count")
+        conn.execute("ALTER TABLE scrape_history RENAME TO scrape_history_old")
+        conn.execute("""
+            CREATE TABLE scrape_history (
+                id           TEXT PRIMARY KEY,
+                platform     TEXT,
+                scrape_date  TEXT,
+                country      TEXT,
+                records_count INTEGER
+            )
+        """)
+        old_rows = conn.execute("SELECT platform, scrape_date FROM scrape_history_old").fetchall()
+        for p, d in old_rows:
+            conn.execute(
+                "INSERT INTO scrape_history (id, platform, scrape_date, country, records_count) VALUES (?, ?, ?, ?, ?)",
+                (uuid.uuid4().hex, p, d, 'in', 0)
+            )
+        conn.execute("DROP TABLE scrape_history_old")

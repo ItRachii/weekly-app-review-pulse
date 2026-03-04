@@ -72,14 +72,13 @@ graph TD
 
 ## 5. Schema Design
 
-### `apps`
+### `applications`
 
 | Column | Type | Description |
 |---|---|---|
-| `id` | UUID (PK) | Internal ID |
-| `store_id` | String | Package Name or App ID |
-| `platform` | Enum | ios / android |
-| `name` | String | "Groww" |
+| `app_name` | TEXT (PK) | Human-readable app name (e.g., "Groww") |
+| `playstore_id` | TEXT | Google Play Store package name |
+| `appstore_id` | TEXT | Apple App Store numeric ID |
 
 ### `reviews`
 

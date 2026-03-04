@@ -193,12 +193,22 @@ if 'pipeline_future' in st.session_state:
 with st.sidebar:
     st.header("Pipeline Configuration")
 
+    # Application Selection (fetched live from the applications table)
+    from src.data_manager import DataManager
+    _dm = DataManager()
+    app_names = [app["app_name"] for app in _dm.get_all_applications()]
+    if not app_names:
+        app_names = ["(no apps registered)"]
+    selected_app = st.selectbox("Application", options=app_names, index=0)
+
     # Date Range Selection
     start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=7))
     end_date = st.date_input("End Date", value=datetime.now())
 
     if st.button("Generate Pulse Report", use_container_width=True):
-        if start_date > end_date:
+        if selected_app == "(no apps registered)":
+            st.error("No applications registered. Please add an app to the database first.")
+        elif start_date > end_date:
             st.error("Error: Start date must be before end date.")
         else:
             # Prepare Custom Run ID for instant feedback
@@ -206,6 +216,9 @@ with st.sidebar:
             start_str = start_date.strftime('%Y%m%d')
             end_str = end_date.strftime('%Y%m%d')
             custom_run_id = f"custom_{start_str}_{end_str}_{timestamp}"
+
+            # Store selected app so the orchestrator can use it
+            st.session_state['selected_app'] = selected_app
 
             # Async Submission
             dt_start = datetime.combine(start_date, datetime.min.time())
@@ -215,7 +228,8 @@ with st.sidebar:
                 orchestrator.run_pipeline,
                 start_date=dt_start,
                 end_date=dt_end,
-                run_id=custom_run_id
+                run_id=custom_run_id,
+                app_name=selected_app
             )
             
             st.session_state['pipeline_future'] = future
