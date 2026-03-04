@@ -91,9 +91,10 @@ Every pipeline run is tracked in the `run_history` table with timestamps and cou
 │              Streamlit Frontend              │
 │  ┌──────────────┐   ┌─────────────────────┐ │
 │  │  Sidebar:    │   │  Main Area:         │ │
-│  │  Date Range  │   │  Report Viewer      │ │
-│  │  Trigger Btn │   │  Email Send Panel   │ │
-│  │  Maintenance │   │  Run Details JSON   │ │
+│  │  App Select  │   │  Report Viewer      │ │
+│  │  Date Range  │   │  Email Send Panel   │ │
+│  │  Trigger Btn │   │  Run Details JSON   │ │
+│  │  Maintenance │   │                     │ │
 │  └──────────────┘   └─────────────────────┘ │
 │  ┌─────────────────────────────────────────┐ │
 │  │  History Table  (@st.fragment, 5s poll) │ │
@@ -142,7 +143,7 @@ Every pipeline run is tracked in the `run_history` table with timestamps and cou
 
 - **Session state initialisation** — pipeline status, toast guard, run ID tracker.
 - **`@st.cache_resource`** — ensures the `PulseOrchestrator` and `ThreadPoolExecutor` are created once per container.
-- **Sidebar** — date range picker, trigger button, maintenance (purge) section.
+- **Sidebar** — application selector, date range picker, trigger button, maintenance (purge) section.
 - **Main area** — conditionally shows the report viewer (if a result exists) or the history table.
 - **`_render_history_table()`** — `@st.fragment(run_every=5)` function that polls the DB and re-renders only the table every 5 seconds, without reloading the page.
 
@@ -157,9 +158,12 @@ The history table uses Streamlit's `@st.fragment(run_every=5)` primitive:
 
 ### Database design
 
-Three tables in a single SQLite file (`data/pulse.db`):
+Four tables in a single SQLite file (`data/pulse.db`):
 
 ```sql
+-- Tracked applications and their store IDs (dynamically populated)
+applications (app_name PK, playstore_id, appstore_id)
+
 -- Raw review storage. UNIQUE constraint prevents duplicates.
 reviews (id PK, platform, rating, title, review_text, date, raw_data)
 
@@ -390,9 +394,10 @@ INFO - Streamlit app started.
 ### Trigger the pipeline
 
 1. Open the app at `http://localhost:8501`.
-2. In the **sidebar**, select a **Start Date** and **End Date**.
-3. Click **Generate Pulse Report**.
-4. The pipeline runs in a background thread — the UI stays responsive.
+2. In the **sidebar**, select a tracked **Application** from the dropdown.
+3. Select a **Start Date** and **End Date**.
+4. Click **Generate Pulse Report**.
+5. The pipeline runs in a background thread — the UI stays responsive.
 
 ### Monitor status
 

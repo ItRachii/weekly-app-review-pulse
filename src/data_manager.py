@@ -55,6 +55,14 @@ class DataManager:
                     error_message    TEXT
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS applications (
+                    app_name           TEXT PRIMARY KEY,
+                    playstore_id       TEXT,
+                    appstore_id        TEXT
+                )
+            """)
+
             # Migrate existing rows: add missing columns if upgrading from old schema
             existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(run_history)").fetchall()}
             migrations = [
@@ -299,4 +307,31 @@ class DataManager:
                 return dict(row) if row else {}
         except Exception as e:
             logger.error(f"Failed to get run log: {e}")
+            return {}
+
+    # ── Application registry helpers ──────────────────────────────────────────
+
+    def get_all_applications(self) -> List[Dict[str, str]]:
+        """Returns every tracked application as a list of dicts."""
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute("SELECT * FROM applications ORDER BY app_name")
+                return [dict(r) for r in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to list applications: {e}")
+            return []
+
+    def get_application(self, app_name: str) -> Dict[str, str]:
+        """Returns a single application row by name, or empty dict."""
+        try:
+            with sqlite3.connect(self.DB_PATH) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    "SELECT * FROM applications WHERE app_name = ?", (app_name,)
+                )
+                row = cursor.fetchone()
+                return dict(row) if row else {}
+        except Exception as e:
+            logger.error(f"Failed to get application '{app_name}': {e}")
             return {}

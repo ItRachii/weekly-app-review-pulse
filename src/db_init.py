@@ -110,6 +110,15 @@ def _create_schema(db_path: str) -> None:
             )
         """)
 
+        # ── Tracked applications table ────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS applications (
+                app_name           TEXT PRIMARY KEY,
+                playstore_id       TEXT,
+                appstore_id        TEXT
+            )
+        """)
+
         # ── Column migrations (backward-compat for older DB files) ────────────
         _apply_migrations(conn)
 

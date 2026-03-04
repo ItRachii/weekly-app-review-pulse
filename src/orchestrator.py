@@ -67,13 +67,14 @@ class PulseOrchestrator:
             with open(self.MANIFEST_FILE, 'w') as f:
                 json.dump(manifest, f, indent=2)
 
-    def run_pipeline(self, force: bool = False, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, run_id: Optional[str] = None) -> Dict[str, Any]:
+    def run_pipeline(self, force: bool = False, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, run_id: Optional[str] = None, app_name: Optional[str] = None) -> Dict[str, Any]:
         """
         Executes the full pipeline.
         :param force: If True, bypasses idempotency check.
         :param start_date: Optional start date for scraping.
         :param end_date: Optional end date for scraping.
         :param run_id: Optional pre-generated run_id for tracking.
+        :param app_name: Optional application name to look up store IDs from the DB.
         """
         # 0. Handle Date Defaults
         current_end = end_date or datetime.now()
@@ -117,10 +118,38 @@ class PulseOrchestrator:
             # 1. Incremental Scrape & Clean
             logger.info(f"Stage 1/4: Intelligent Scraping ({current_start.date()} to {current_end.date()})...")
             
-            platforms = [
-                {"name": "ios", "id": "1404871703"},
-                {"name": "android", "id": "com.groww"}
-            ]
+            # Build platform list from the applications table
+            # Use a fresh DataManager to avoid stale @st.cache_resource issues
+            from src.data_manager import DataManager
+            _app_dm = DataManager()
+            app = None
+            if app_name:
+                app = _app_dm.get_application(app_name)
+                logger.info(f"Looked up application '{app_name}': {app}")
+            if not app:
+                # Fallback: pick the first registered app
+                apps = _app_dm.get_all_applications()
+                app = apps[0] if apps else None
+
+            if not app:
+                raise PulsePipelineError(
+                    "No applications registered in the database. "
+                    "Please add at least one application before running the pipeline.",
+                    "Scraping"
+                )
+
+            logger.info(f"Using application: {app['app_name']} | Play Store: {app.get('playstore_id')} | App Store: {app.get('appstore_id')}")
+            platforms = []
+            if app.get("appstore_id"):
+                platforms.append({"name": "ios", "id": app["appstore_id"]})
+            if app.get("playstore_id"):
+                platforms.append({"name": "android", "id": app["playstore_id"]})
+
+            if not platforms:
+                raise PulsePipelineError(
+                    f"Application '{app['app_name']}' has no Play Store or App Store ID configured.",
+                    "Scraping"
+                )
             
             for platform in platforms:
                 missing_ranges = self.data_manager.get_missing_ranges(current_start, current_end, platform["name"])

@@ -118,12 +118,39 @@ class ScraperEngine:
             return []
 
 if __name__ == "__main__":
+    import sys
     logging.basicConfig(level=logging.INFO)
+
+    # Pull app IDs from the applications table
+    from src.data_manager import DataManager
+    dm = DataManager()
+
+    # Accept optional app name from CLI, otherwise use the first registered app
+    if len(sys.argv) > 1:
+        app = dm.get_application(sys.argv[1])
+        if not app:
+            print(f"Application '{sys.argv[1]}' not found in DB.")
+            exit(1)
+    else:
+        apps = dm.get_all_applications()
+        if not apps:
+            print("No applications registered in DB. Please add one first.")
+            exit(1)
+        app = apps[0]
+
+    appstore_id = app.get("appstore_id")
+    playstore_id = app.get("playstore_id")
+    print(f"Using app: {app['app_name']} | App Store: {appstore_id} | Play Store: {playstore_id}")
+
     se = ScraperEngine(weeks_back=52)
-    ios = se.scrape_app_store("1404871703")
-    android = se.scrape_play_store("com.groww")
-    
+
+    ios = se.scrape_app_store(appstore_id) if appstore_id else []
+    android = se.scrape_play_store(playstore_id) if playstore_id else []
+
     print(f"Total reviews: {len(ios) + len(android)}")
     # Save combined
-    with open('data/groww_reviews.json', 'w') as f:
+    out_file = f"data/{app['app_name'].lower()}_reviews.json"
+    with open(out_file, 'w') as f:
         json.dump(ios + android, f, indent=2, default=str)
+    print(f"Saved to {out_file}")
+
