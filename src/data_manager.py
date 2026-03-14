@@ -62,7 +62,8 @@ class DataManager:
                     app_name           TEXT PRIMARY KEY,
                     playstore_id       TEXT,
                     appstore_id        TEXT,
-                    regions            TEXT DEFAULT 'in'
+                    regions            TEXT DEFAULT 'in',
+                    logo_url           TEXT
                 )
             """)
 
@@ -84,6 +85,8 @@ class DataManager:
             existing_app_cols = {row[1] for row in conn.execute("PRAGMA table_info(applications)").fetchall()}
             if "regions" not in existing_app_cols:
                 conn.execute("ALTER TABLE applications ADD COLUMN regions TEXT DEFAULT 'in'")
+            if "logo_url" not in existing_app_cols:
+                conn.execute("ALTER TABLE applications ADD COLUMN logo_url TEXT")
 
             existing_scrape = {row[1] for row in conn.execute("PRAGMA table_info(scrape_history)")}
             if "id" not in existing_scrape:

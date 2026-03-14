@@ -188,10 +188,205 @@ with st.sidebar:
     # Application Selection (fetched live from the applications table)
     from src.data_manager import DataManager
     _dm = DataManager()
-    app_names = [app["app_name"] for app in _dm.get_all_applications()]
+    app_records = _dm.get_all_applications()
+    app_names = [app["app_name"] for app in app_records]
+    
     if not app_names:
         app_names = ["(no apps registered)"]
-    selected_app = st.selectbox("Application", options=app_names, index=0)
+        selected_app = st.selectbox("Application", options=app_names, index=0)
+    else:
+        # ── Read selection written back by the JS dropdown ──────────────────
+        if 'selected_app_dropdown' not in st.session_state:
+            st.session_state.selected_app_dropdown = app_names[0]
+
+        # If JS wrote a new selection via query param, absorb it & clear
+        _qp_sel = st.query_params.get("_app_sel")
+        if _qp_sel and _qp_sel in app_names:
+            st.session_state.selected_app_dropdown = _qp_sel
+        if "_app_sel" in st.query_params:
+            del st.query_params["_app_sel"]
+
+        selected_app = st.session_state.selected_app_dropdown
+
+        # ── Build app data for the JS component ─────────────────────────────
+        import json as _json
+        _apps_js = _json.dumps(
+            [{"name": a["app_name"], "logo": a.get("logo_url", "")} for a in app_records]
+        )
+        _sel_record = next((a for a in app_records if a["app_name"] == selected_app), app_records[0])
+        _sel_logo   = _sel_record.get("logo_url", "")
+
+        st.write("**Application**")
+
+        # ── Full custom dropdown via components.html ─────────────────────────
+        # The dropdown panel is appended to window.parent.document.body as
+        # position:fixed so it is never clipped by the iframe boundary and
+        # is completely free of Streamlit's CSS cascade.
+        # Selection is communicated back by setting window.parent.location
+        # query param "_app_sel" which Streamlit reads on next rerun.
+        components.html(f"""
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: inherit; }}
+  body {{ background: transparent; }}
+  #trigger {{
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 12px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    color: #1a1a2e;
+    user-select: none;
+    transition: border-color 0.15s;
+    width: 100%;
+  }}
+  #trigger:hover {{ border-color: #5367F5; }}
+  #trigger img {{ width: 22px; height: 22px; border-radius: 4px; object-fit: cover; flex-shrink: 0; }}
+  #trigger-name {{ flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+  #trigger-arrow {{ font-size: 10px; color: #666; flex-shrink: 0; }}
+</style>
+</head><body>
+<div id="trigger" onclick="toggleMenu()">
+  {'<img id="tri" src="' + _sel_logo + '" onerror="this.style.display=\'none\'" />' if _sel_logo else '<span style="font-size:18px">📱</span>'}
+  <span id="trigger-name">{selected_app}</span>
+  <span id="trigger-arrow">&#9660;</span>
+</div>
+<script>
+const APPS   = {_apps_js};
+const SEL    = {_json.dumps(selected_app)};
+const PARENT = window.parent;
+const PDOC   = PARENT.document;
+
+// Inherit Streamlit's actual rendered font so trigger + panel match the UI
+const _parentFont = window.getComputedStyle(PDOC.body).fontFamily
+                    || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+document.body.style.fontFamily = _parentFont;
+
+let panel = null;
+let open  = false;
+
+function buildPanel() {{
+  // Remove old panel if any
+  const old = PDOC.getElementById('__app_dd_panel__');
+  if (old) old.remove();
+
+  panel = PDOC.createElement('div');
+  panel.id = '__app_dd_panel__';
+
+  const iframe = window.frameElement;
+  const r = iframe.getBoundingClientRect();
+
+  Object.assign(panel.style, {{
+    position:     'fixed',
+    top:          (r.bottom + 4) + 'px',
+    left:         r.left + 'px',
+    width:        r.width + 'px',
+    zIndex:       '2147483647',
+    background:   '#ffffff',
+    border:       '1px solid #d0d5dd',
+    borderRadius: '8px',
+    boxShadow:    '0 4px 16px rgba(0,0,0,0.12)',
+    padding:      '4px 0',
+    overflow:     'hidden',
+    animation:    'ddFadeIn 0.12s ease',
+    fontFamily:   _parentFont,
+  }});
+
+  // Keyframe animation + item styles — inject once, includes parent font
+  if (!PDOC.getElementById('__app_dd_kf__')) {{
+    const kf = PDOC.createElement('style');
+    kf.id = '__app_dd_kf__';
+    kf.textContent = `
+      @keyframes ddFadeIn {{ from {{ opacity:0; transform:translateY(-4px) }} to {{ opacity:1; transform:translateY(0) }} }}
+      #__app_dd_panel__ div.dd-item {{
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 14px;
+        cursor: pointer; font-size: 14px; color: #1a1a2e;
+        font-family: ${{_parentFont}};
+        transition: background 0.12s;
+        white-space: nowrap;
+      }}
+      #__app_dd_panel__ div.dd-item:hover   {{ background: rgba(83,103,245,0.08); }}
+      #__app_dd_panel__ div.dd-item.selected {{ background: rgba(83,103,245,0.13); font-weight: 600; }}
+      #__app_dd_panel__ div.dd-item img {{
+        width: 26px; height: 26px; border-radius: 5px; object-fit: cover; flex-shrink: 0;
+      }}
+    `;
+    PDOC.head.appendChild(kf);
+  }}
+
+  APPS.forEach(app => {{
+    const item = PDOC.createElement('div');
+    item.className = 'dd-item' + (app.name === SEL ? ' selected' : '');
+    if (app.logo) {{
+      const img = PDOC.createElement('img');
+      img.src = app.logo;
+      img.onerror = () => {{ img.replaceWith(PDOC.createTextNode('📱')); }};
+      item.appendChild(img);
+    }} else {{
+      item.appendChild(PDOC.createTextNode('📱'));
+    }}
+    const label = PDOC.createElement('span');
+    label.textContent = app.name;
+    item.appendChild(label);
+    item.onclick = (e) => {{ e.stopPropagation(); selectApp(app.name); }};
+    panel.appendChild(item);
+  }});
+
+  PDOC.body.appendChild(panel);
+}}
+
+function toggleMenu() {{
+  if (open) {{ closeMenu(); }} else {{ openMenu(); }}
+}}
+
+function openMenu() {{
+  buildPanel();
+  open = true;
+  document.getElementById('trigger-arrow').textContent = '\u25B2';
+  // Close on outside click
+  PDOC.addEventListener('click', outsideClick, true);
+}}
+
+function closeMenu() {{
+  const p = PDOC.getElementById('__app_dd_panel__');
+  if (p) p.remove();
+  open = false;
+  document.getElementById('trigger-arrow').textContent = '\u25BC';
+  PDOC.removeEventListener('click', outsideClick, true);
+}}
+
+function outsideClick(e) {{
+  const p = PDOC.getElementById('__app_dd_panel__');
+  const trigger = window.frameElement; // the iframe in parent doc
+  if (p && !p.contains(e.target) && !trigger.contains(e.target)) {{
+    closeMenu();
+  }}
+}}
+
+function selectApp(name) {{
+  closeMenu();
+  // Update trigger label immediately (optimistic UI)
+  document.getElementById('trigger-name').textContent = name;
+  const app = APPS.find(a => a.name === name);
+  if (app) {{
+    const tri = document.getElementById('tri');
+    if (tri && app.logo) {{ tri.src = app.logo; tri.style.display = ''; }}
+  }}
+  // Communicate to Streamlit: set query param + pushState + popstate
+  const url = new URL(PARENT.location.href);
+  url.searchParams.set('_app_sel', name);
+  PARENT.history.pushState({{}}, '', url.toString());
+  PARENT.dispatchEvent(new PopStateEvent('popstate'));
+  // Re-inject popstate after small delay to make sure Streamlit picks it up
+  setTimeout(() => PARENT.dispatchEvent(new PopStateEvent('popstate')), 150);
+}}
+</script>
+</body></html>
+        """, height=46, scrolling=False)
 
     # Date Range Selection
     start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=7))

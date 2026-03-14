@@ -119,7 +119,8 @@ def _create_schema(db_path: str) -> None:
                 app_name           TEXT PRIMARY KEY,
                 playstore_id       TEXT,
                 appstore_id        TEXT,
-                regions            TEXT DEFAULT 'in'
+                regions            TEXT DEFAULT 'in',
+                logo_url           TEXT
             )
         """)
 
@@ -164,6 +165,10 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
     if "regions" not in existing_applications:
         conn.execute("ALTER TABLE applications ADD COLUMN regions TEXT DEFAULT 'in'")
         logger.info("Migration applied: added column applications.regions")
+    
+    if "logo_url" not in existing_applications:
+        conn.execute("ALTER TABLE applications ADD COLUMN logo_url TEXT")
+        logger.info("Migration applied: added column applications.logo_url")
 
     existing_scrape = {row[1] for row in conn.execute("PRAGMA table_info(scrape_history)")}
     if "id" not in existing_scrape:
